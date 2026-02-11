@@ -13,9 +13,11 @@
     "@atproto/api": "^0.17.0",
     "@pinia/nuxt": "^0.5.5",
     "@vueuse/core": "^12.5.0",
+    "copilot": "^0.0.2",
     "hls.js": "^1.6.15",
     "interactjs": "^1.10.27",
-    "nuxt": "^3.15.4"
+    "nuxi": "^3.33.1",
+    "nuxt": "^3.21.1"
   },
   "devDependencies": {
     "typescript": "^5.7.3",
