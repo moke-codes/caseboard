@@ -5,6 +5,16 @@ export interface FeedOption {
   value: FeedSource;
 }
 
+export type FeedMediaType = "image" | "video" | "gif";
+
+export interface FeedMediaItem {
+  id: string;
+  type: FeedMediaType;
+  url: string;
+  previewUrl?: string;
+  alt?: string;
+}
+
 export interface FeedPost {
   uri?: string;
   cid?: string;
@@ -13,6 +23,7 @@ export interface FeedPost {
   authorDisplayName: string;
   authorHandle: string;
   authorAvatar?: string;
+  media: FeedMediaItem[];
 }
 
 export interface BoardCard {

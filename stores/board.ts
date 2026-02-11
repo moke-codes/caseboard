@@ -81,12 +81,14 @@ export const useBoardStore = defineStore("board", () => {
   }
 
   function addCard(post: FeedPost, x: number, y: number) {
+    const id = String(cardSeed.value++);
     cards.value.push({
-      id: String(cardSeed.value++),
+      id,
       post,
       x,
       y,
     });
+    return id;
   }
 
   function moveCardByDelta(id: string, dx: number, dy: number) {
@@ -119,6 +121,17 @@ export const useBoardStore = defineStore("board", () => {
     note.y = Math.max(0, note.y + dy);
   }
 
+  function clearBoard() {
+    cards.value = [];
+    postIts.value = [];
+    links.value = [];
+    selectedCardIds.value = [];
+    linkMode.value = false;
+    cardSeed.value = 1;
+    postItSeed.value = 1;
+    linkSeed.value = 1;
+  }
+
   function setLinkMode(enabled: boolean) {
     linkMode.value = enabled;
     selectedCardIds.value = [];
@@ -126,6 +139,15 @@ export const useBoardStore = defineStore("board", () => {
 
   function setLinkColor(color: string) {
     linkColor.value = color;
+  }
+
+  function addLink(from: string, to: string, color = linkColor.value) {
+    links.value.push({
+      id: String(linkSeed.value++),
+      from,
+      to,
+      color,
+    });
   }
 
   function selectCardForLink(cardId: string) {
@@ -136,12 +158,7 @@ export const useBoardStore = defineStore("board", () => {
 
     if (selectedCardIds.value.length === 2) {
       const [from, to] = selectedCardIds.value;
-      links.value.push({
-        id: String(linkSeed.value++),
-        from,
-        to,
-        color: linkColor.value,
-      });
+      addLink(from, to, linkColor.value);
       selectedCardIds.value = [];
     }
   }
@@ -160,8 +177,10 @@ export const useBoardStore = defineStore("board", () => {
     addPostIt,
     updatePostItText,
     movePostItByDelta,
+    clearBoard,
     setLinkMode,
     setLinkColor,
+    addLink,
     selectCardForLink,
     hydrateForHandle,
     resetSessionState,

@@ -182,14 +182,7 @@ button:hover:not(:disabled) {
   overflow: hidden;
   cursor: grab;
   touch-action: none;
-  background:
-    radial-gradient(circle at 10% 10%, rgba(255, 232, 188, 0.15), transparent 42%),
-    radial-gradient(circle at 86% 18%, rgba(255, 240, 190, 0.11), transparent 38%),
-    radial-gradient(circle at 27% 79%, rgba(103, 65, 28, 0.18), transparent 36%),
-    repeating-linear-gradient(45deg, rgba(255, 250, 231, 0.08) 0, rgba(255, 250, 231, 0.08) 1px, transparent 1px, transparent 7px),
-    repeating-linear-gradient(-34deg, rgba(61, 36, 15, 0.1) 0, rgba(61, 36, 15, 0.1) 1px, transparent 1px, transparent 9px),
-    linear-gradient(135deg, #925b2f 0%, #7f4c26 42%, #6a3f1f 100%);
-  background-blend-mode: screen, screen, multiply, normal, multiply, normal;
+  background: #6a4426;
 }
 
 #board-dropzone.panning {
@@ -202,9 +195,9 @@ button:hover:not(:disabled) {
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(circle at 0 0, rgba(255, 255, 255, 0.2) 0, transparent 12px),
-    radial-gradient(circle at 100% 100%, rgba(0, 0, 0, 0.16) 0, transparent 14px);
-  opacity: 0.55;
+    radial-gradient(circle at 18% 14%, rgba(255, 255, 255, 0.08), transparent 42%),
+    radial-gradient(circle at 86% 84%, rgba(0, 0, 0, 0.12), transparent 46%);
+  opacity: 0.42;
 }
 
 #thread-layer {
@@ -223,6 +216,13 @@ button:hover:not(:disabled) {
   top: 0;
   transform-origin: 0 0;
   will-change: transform;
+  background-image:
+    linear-gradient(rgba(36, 20, 8, 0.28), rgba(36, 20, 8, 0.28)),
+    url("../textures/cork-photo.png");
+  background-repeat: no-repeat, repeat;
+  background-size: 100% 100%, 400px 400px;
+  background-position: center, top left;
+  background-blend-mode: multiply, normal;
 }
 
 .thread-line {
@@ -278,6 +278,48 @@ button:hover:not(:disabled) {
   font-size: 0.85rem;
 }
 
+.post-media-list {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0.45rem 0 0.5rem;
+}
+
+.post-media {
+  width: 100%;
+  max-height: 280px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  object-fit: cover;
+  background: #0a0b0e;
+}
+
+.media-card .polaroid {
+  padding: 0.55rem 0.55rem 1rem;
+}
+
+.polaroid-photo {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.6rem;
+}
+
+.media-card .post-media {
+  border-radius: 2px;
+  max-height: 180px;
+  border: 1px solid #b9b2a8;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  background: #f0ede6;
+}
+
+.media-caption {
+  margin: 0 0 0.55rem;
+  padding: 0.1rem 0.15rem;
+  color: #2a2927;
+  font-size: 0.95rem;
+  line-height: 1.35;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
 .board-card {
   position: absolute;
   width: 230px;
@@ -298,7 +340,7 @@ button:hover:not(:disabled) {
   border: 1px solid #555d67;
   margin: 0 auto -8px;
   position: relative;
-  z-index: 60;
+  z-index: 35;
   box-shadow:
     0 2px 3px rgba(0, 0, 0, 0.4),
     inset -2px -2px 2px rgba(0, 0, 0, 0.25),
@@ -391,26 +433,37 @@ button:hover:not(:disabled) {
   width: 180px;
   min-height: 140px;
   color: #2e2819;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  font-family: "Caveat", cursive;
+  overflow: visible;
+  touch-action: none;
+  padding-top: 0.45rem;
+}
+
+.postit::before {
+  content: "";
+  position: absolute;
+  inset: 0;
   background: linear-gradient(130deg, #fef5ac, #ffe96a);
   border: 1px solid #e0cb58;
   box-shadow: 0 7px 15px rgba(0, 0, 0, 0.3);
-  font-family: "Caveat", cursive;
-  overflow: hidden;
-  touch-action: none;
-  padding-top: 0.2rem;
+  z-index: 36;
 }
 
 .pin-postit {
   position: absolute;
-  top: -8px;
-  right: 16px;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
   margin: 0;
-  z-index: 60;
+  z-index: 61;
 }
 
 .postit-handle {
   position: relative;
-  z-index: 10;
+  z-index: 37;
   height: 24px;
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.08));
   cursor: move;
@@ -418,7 +471,7 @@ button:hover:not(:disabled) {
 
 .postit-editor {
   position: relative;
-  z-index: 10;
+  z-index: 37;
   display: block;
   width: 100%;
   border: 0;
@@ -476,6 +529,17 @@ button:hover:not(:disabled) {
 
 .modal-content ol {
   line-height: 1.5;
+}
+
+.modal-content p {
+  margin: 0.35rem 0 0.9rem;
+  line-height: 1.4;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
 }
 
 @media (max-width: 920px) {
