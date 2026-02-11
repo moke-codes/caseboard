@@ -237,6 +237,11 @@ button:hover:not(:disabled) {
   cursor: pointer;
 }
 
+.thread-color-control input[type="color"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .thread-color-control input[type="color"]::-webkit-color-swatch-wrapper {
   padding: 0;
 }
@@ -720,6 +725,21 @@ button:hover:not(:disabled) {
   display: flex;
   justify-content: flex-end;
   gap: 0.6rem;
+}
+
+.share-links {
+  margin-top: 0.9rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.share-links label {
+  display: grid;
+  gap: 0.28rem;
+}
+
+.share-links input {
+  font-size: 0.8rem;
 }
 
 @media (max-width: 920px) {
