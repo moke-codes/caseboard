@@ -828,6 +828,7 @@ button:hover:not(:disabled) {
   overflow: visible;
   touch-action: none;
   padding-top: 0.45rem;
+  isolation: isolate;
 }
 
 .postit::before {
