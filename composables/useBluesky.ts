@@ -339,21 +339,62 @@ export function useBluesky() {
       throw new Error("Not authenticated");
     }
 
-    const response = await agent.value.app.bsky.feed.getActorFeeds({
+    const orderedFeeds: FeedSource[] = ["timeline"];
+    const labelByFeed = new Map<FeedSource, string>([["timeline", "Home Timeline"]]);
+
+    const ownFeedsResponse = await agent.value.app.bsky.feed.getActorFeeds({
       actor: did,
       limit: 100,
     });
 
-    const options: FeedOption[] = [{ label: "Home Timeline", value: "timeline" }];
+    for (const feed of ownFeedsResponse.data.feeds ?? []) {
+      const uri = feed.uri;
+      orderedFeeds.push(uri);
+      labelByFeed.set(uri, feed.displayName ?? feed.uri);
+    }
 
-    for (const feed of response.data.feeds ?? []) {
-      options.push({
-        label: feed.displayName ?? feed.uri,
-        value: feed.uri,
+    try {
+      const prefs = await agent.value.getPreferences();
+      const savedFeedUris = (prefs.savedFeeds ?? [])
+        .filter((item) => item.type === "feed")
+        .map((item) => item.value)
+        .filter((value): value is string => typeof value === "string" && value.length > 0);
+
+      const unresolved = savedFeedUris.filter((uri) => !labelByFeed.has(uri));
+      const resolvableSavedUris = new Set<string>();
+
+      if (unresolved.length) {
+        const chunkSize = 25;
+        for (let index = 0; index < unresolved.length; index += chunkSize) {
+          const chunk = unresolved.slice(index, index + chunkSize);
+          const details = await agent.value.app.bsky.feed.getFeedGenerators({ feeds: chunk });
+          for (const feed of details.data.feeds ?? []) {
+            labelByFeed.set(feed.uri, feed.displayName ?? feed.uri);
+            resolvableSavedUris.add(feed.uri);
+          }
+        }
+      }
+
+      for (const uri of savedFeedUris) {
+        if (unresolved.includes(uri) && !resolvableSavedUris.has(uri)) continue;
+        orderedFeeds.push(uri);
+      }
+    } catch {
+      // Keep own feeds even if saved/pinned feeds cannot be loaded.
+    }
+
+    const deduped: FeedOption[] = [];
+    const seen = new Set<FeedSource>();
+    for (const feed of orderedFeeds) {
+      if (seen.has(feed)) continue;
+      seen.add(feed);
+      deduped.push({
+        value: feed,
+        label: labelByFeed.get(feed) ?? String(feed),
       });
     }
 
-    return options;
+    return deduped;
   }
 
   async function getFeedPage(feed: FeedSource, cursor: string | null): Promise<FeedPage> {
