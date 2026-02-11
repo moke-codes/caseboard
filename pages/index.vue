@@ -133,6 +133,13 @@ function formatDate(value?: string) {
   return new Date(value).toLocaleString();
 }
 
+function postUriToWebUrl(post: FeedPost) {
+  if (!post.uri || !post.authorHandle) return null;
+  const match = post.uri.match(/^at:\/\/[^/]+\/app\.bsky\.feed\.post\/([^/?#]+)$/);
+  if (!match) return null;
+  return `https://bsky.app/profile/${post.authorHandle}/post/${match[1]}`;
+}
+
 function updateBoardSize() {
   if (!boardDropzoneRef.value) return;
   boardSize.width = boardDropzoneRef.value.clientWidth;
@@ -749,16 +756,19 @@ onUnmounted(() => {
       <div class="workspace">
         <section id="board-panel">
           <div class="board-toolbar">
-            <button class="tool-btn" @click="addPostIt">Add Post-it</button>
-            <button class="tool-btn" :disabled="!boardStore.canUndo" @click="onUndo">Undo</button>
-            <button class="tool-btn" :disabled="!boardStore.canRedo" @click="onRedo">Redo</button>
-            <button class="tool-btn" @click="openClearBoardModal">Clear Board</button>
-            <label>
-              Thread color
-              <input :value="boardStore.linkColor" type="color" @input="onThreadColorInput" />
-            </label>
-            <button v-if="!boardStore.linkMode" class="tool-btn" @click="setLinkMode(true)">Link</button>
-            <button v-else class="tool-btn" @click="setLinkMode(false)">Cancel Linking</button>
+            <div class="toolbar-group">
+              <button class="tool-btn" @click="addPostIt">Add Post-it</button>
+              <button class="tool-btn" :disabled="!boardStore.canUndo" @click="onUndo">Undo</button>
+              <button class="tool-btn" :disabled="!boardStore.canRedo" @click="onRedo">Redo</button>
+              <button class="tool-btn tool-btn-danger" @click="openClearBoardModal">Clear Board</button>
+            </div>
+            <div class="toolbar-group toolbar-group-right">
+              <button v-if="!boardStore.linkMode" class="tool-btn tool-btn-link" @click="setLinkMode(true)">Link</button>
+              <button v-else class="tool-btn tool-btn-link-active" @click="setLinkMode(false)">Cancel Linking</button>
+              <label class="thread-color-control" aria-label="Thread color">
+                <input :value="boardStore.linkColor" type="color" @input="onThreadColorInput" />
+              </label>
+            </div>
           </div>
 
           <div
@@ -826,6 +836,11 @@ onUnmounted(() => {
                       </template>
                     </div>
                     <p class="media-caption">{{ card.post.text }}</p>
+                    <div v-if="postUriToWebUrl(card.post)" class="post-go-row">
+                      <a :href="postUriToWebUrl(card.post)!" target="_blank" rel="noopener noreferrer" @click.stop
+                        >Go</a
+                      >
+                    </div>
                   </template>
                   <template v-else>
                     <header>
@@ -841,12 +856,19 @@ onUnmounted(() => {
                         <div v-else class="author-avatar avatar-fallback" aria-hidden="true">
                           {{ card.post.authorDisplayName.slice(0, 1).toUpperCase() }}
                         </div>
-                        <strong>{{ card.post.authorDisplayName }}</strong>
+                        <div class="author-meta">
+                          <strong>{{ card.post.authorDisplayName }}</strong>
+                          <span class="handle">@{{ card.post.authorHandle }}</span>
+                        </div>
                       </div>
-                      <span class="handle">@{{ card.post.authorHandle }}</span>
                     </header>
                     <p class="post-text">{{ card.post.text }}</p>
                     <time class="date">{{ formatDate(card.post.createdAt) }}</time>
+                    <div v-if="postUriToWebUrl(card.post)" class="post-go-row">
+                      <a :href="postUriToWebUrl(card.post)!" target="_blank" rel="noopener noreferrer" @click.stop
+                        >Go</a
+                      >
+                    </div>
                   </template>
                 </div>
               </article>
