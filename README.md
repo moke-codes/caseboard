@@ -50,6 +50,24 @@ You can set host/port with environment variables:
 NITRO_HOST=0.0.0.0 NITRO_PORT=3000 node .output/server/index.mjs
 ```
 
+## Production TLS Certificate Configuration
+
+In production, this app requires TLS certs via environment variables:
+
+- `NUXT_HTTPS_KEY` (private key PEM content)
+- `NUXT_HTTPS_CERT` (certificate PEM content)
+
+Example:
+
+```bash
+export NUXT_HTTPS_KEY="$(cat /etc/letsencrypt/live/caseboard.example.com/privkey.pem)"
+export NUXT_HTTPS_CERT="$(cat /etc/letsencrypt/live/caseboard.example.com/fullchain.pem)"
+export NODE_ENV=production
+node .output/server/index.mjs
+```
+
+If either variable is missing in production, startup fails with a clear error.
+
 ## Data Persistence
 
 Shared board data is stored on disk using Nitro storage at:
@@ -136,7 +154,7 @@ WorkingDirectory=/opt/caseboard
 Environment=NODE_ENV=production
 Environment=NITRO_HOST=127.0.0.1
 Environment=NITRO_PORT=3000
-ExecStart=/usr/bin/node /opt/caseboard/.output/server/index.mjs
+ExecStart=/bin/sh -lc 'NUXT_HTTPS_KEY="$(cat /etc/letsencrypt/live/caseboard.example.com/privkey.pem)" NUXT_HTTPS_CERT="$(cat /etc/letsencrypt/live/caseboard.example.com/fullchain.pem)" exec /usr/bin/node /opt/caseboard/.output/server/index.mjs'
 Restart=always
 RestartSec=5
 
@@ -162,6 +180,7 @@ sudo journalctl -u caseboard -f
 Notes:
 
 - Adjust `User`, `WorkingDirectory`, and `ExecStart` to your server paths.
+- Adjust certificate paths in `ExecStart` to match your server.
 - Ensure your app is built (`npm run build`) before starting the service.
 
 ## Operational Commands
