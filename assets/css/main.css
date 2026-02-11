@@ -368,6 +368,19 @@ button:hover:not(:disabled) {
   font-size: 0.85rem;
 }
 
+.post-text a,
+.media-caption a {
+  color: #4b7fb8;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-word;
+}
+
+.post-text a:hover,
+.media-caption a:hover {
+  color: #6fa2dd;
+}
+
 .feed-item-meta {
   display: flex;
   align-items: center;
@@ -437,18 +450,31 @@ button:hover:not(:disabled) {
 .post-go-row {
   display: flex;
   justify-content: flex-end;
+  gap: 0.55rem;
   margin-top: 0.15rem;
 }
 
-.post-go-row a {
+.post-go-row a,
+.action-link {
   font-size: 0.72rem;
   color: #4f6f93;
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
-.post-go-row a:hover {
+.post-go-row a:hover,
+.action-link:hover {
   color: #7294b9;
+}
+
+.action-link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.72rem;
+  line-height: 1;
+  font-family: "Special Elite", serif;
 }
 
 .board-card {
@@ -638,6 +664,14 @@ button:hover:not(:disabled) {
 
 .postit-editor::placeholder {
   color: rgba(49, 39, 19, 0.5);
+}
+
+.postit-actions {
+  position: relative;
+  z-index: 37;
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 0.7rem 0.45rem;
 }
 
 #feed-status {

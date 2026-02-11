@@ -140,6 +140,27 @@ function postUriToWebUrl(post: FeedPost) {
   return `https://bsky.app/profile/${post.authorHandle}/post/${match[1]}`;
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function linkifyPostText(value: string) {
+  const escaped = escapeHtml(value);
+  const urlPattern = /\b((?:https?:\/\/|www\.)[^\s<]+|(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s<]*)?)/gi;
+  return escaped.replace(urlPattern, (rawUrl) => {
+    const match = rawUrl.match(/^(.*?)([.,!?;:)\]]*)$/);
+    const coreUrl = match?.[1] ?? rawUrl;
+    const trailing = match?.[2] ?? "";
+    const href = coreUrl.startsWith("http://") || coreUrl.startsWith("https://") ? coreUrl : `https://${coreUrl}`;
+    return `<a href="${href}" target="_blank" rel="noopener noreferrer">${coreUrl}</a>${trailing}`;
+  });
+}
+
 function updateBoardSize() {
   if (!boardDropzoneRef.value) return;
   boardSize.width = boardDropzoneRef.value.clientWidth;
@@ -369,6 +390,14 @@ function onRedo() {
 function onPostItInput(noteId: string, event: Event) {
   const target = event.target as HTMLTextAreaElement;
   boardStore.updatePostItText(noteId, target.value);
+}
+
+function onDeleteCard(cardId: string) {
+  boardStore.deleteCard(cardId);
+}
+
+function onDeletePostIt(noteId: string) {
+  boardStore.deletePostIt(noteId);
 }
 
 function isVideoLikeMedia(media: FeedMediaItem) {
@@ -835,11 +864,17 @@ onUnmounted(() => {
                         />
                       </template>
                     </div>
-                    <p class="media-caption">{{ card.post.text }}</p>
-                    <div v-if="postUriToWebUrl(card.post)" class="post-go-row">
-                      <a :href="postUriToWebUrl(card.post)!" target="_blank" rel="noopener noreferrer" @click.stop
+                    <p class="media-caption" v-html="linkifyPostText(card.post.text)"></p>
+                    <div class="post-go-row">
+                      <a
+                        v-if="postUriToWebUrl(card.post)"
+                        :href="postUriToWebUrl(card.post)!"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        @click.stop
                         >Go</a
                       >
+                      <button class="action-link" @click.stop="onDeleteCard(card.id)">Del</button>
                     </div>
                   </template>
                   <template v-else>
@@ -862,12 +897,18 @@ onUnmounted(() => {
                         </div>
                       </div>
                     </header>
-                    <p class="post-text">{{ card.post.text }}</p>
+                    <p class="post-text" v-html="linkifyPostText(card.post.text)"></p>
                     <time class="date">{{ formatDate(card.post.createdAt) }}</time>
-                    <div v-if="postUriToWebUrl(card.post)" class="post-go-row">
-                      <a :href="postUriToWebUrl(card.post)!" target="_blank" rel="noopener noreferrer" @click.stop
+                    <div class="post-go-row">
+                      <a
+                        v-if="postUriToWebUrl(card.post)"
+                        :href="postUriToWebUrl(card.post)!"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        @click.stop
                         >Go</a
                       >
+                      <button class="action-link" @click.stop="onDeleteCard(card.id)">Del</button>
                     </div>
                   </template>
                 </div>
@@ -891,6 +932,9 @@ onUnmounted(() => {
                   @input="onPostItInput(note.id, $event)"
                   :value="note.text"
                 ></textarea>
+                <div class="postit-actions">
+                  <button class="action-link" @click.stop="onDeletePostIt(note.id)">Del</button>
+                </div>
               </article>
             </div>
           </div>
@@ -937,7 +981,7 @@ onUnmounted(() => {
                 </div>
                 <span class="handle">@{{ post.authorHandle }}</span>
               </header>
-              <p class="post-text">{{ post.text }}</p>
+              <p class="post-text" v-html="linkifyPostText(post.text)"></p>
               <div v-if="post.media?.length" class="post-media-list">
                 <template v-for="mediaItem in post.media" :key="mediaItem.id">
                   <video

@@ -230,6 +230,14 @@ export const useBoardStore = defineStore("board", () => {
     card.y = Math.max(0, card.y + dy);
   }
 
+  function deleteCard(id: string) {
+    recordBeforeMutation();
+    const targetIds = new Set([id, `card:${id}`]);
+    cards.value = cards.value.filter((item) => item.id !== id);
+    links.value = links.value.filter((link) => !targetIds.has(link.from) && !targetIds.has(link.to));
+    selectedLinkTargets.value = selectedLinkTargets.value.filter((target) => !targetIds.has(target));
+  }
+
   function addPostIt() {
     recordBeforeMutation();
     const offset = postIts.value.length;
@@ -253,6 +261,14 @@ export const useBoardStore = defineStore("board", () => {
     if (!note) return;
     note.x = Math.max(0, note.x + dx);
     note.y = Math.max(0, note.y + dy);
+  }
+
+  function deletePostIt(id: string) {
+    recordBeforeMutation();
+    const targetId = `note:${id}`;
+    postIts.value = postIts.value.filter((item) => item.id !== id);
+    links.value = links.value.filter((link) => link.from !== targetId && link.to !== targetId);
+    selectedLinkTargets.value = selectedLinkTargets.value.filter((target) => target !== targetId);
   }
 
   function clearBoard() {
@@ -310,9 +326,11 @@ export const useBoardStore = defineStore("board", () => {
     selectedLinkTargets,
     addCard,
     moveCardByDelta,
+    deleteCard,
     addPostIt,
     updatePostItText,
     movePostItByDelta,
+    deletePostIt,
     clearBoard,
     canUndo,
     canRedo,
