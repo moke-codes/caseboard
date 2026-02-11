@@ -19,6 +19,11 @@ export interface FeedPost {
   uri?: string;
   cid?: string;
   text: string;
+  textLinks?: {
+    start: number;
+    end: number;
+    url: string;
+  }[];
   createdAt?: string;
   replyCount?: number;
   authorDisplayName: string;

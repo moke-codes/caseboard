@@ -3,7 +3,7 @@ import { useDebounceFn, useInfiniteScroll, useLocalStorage } from "@vueuse/core"
 import type { ComponentPublicInstance } from "vue";
 import type { FeedMediaItem, FeedOption, FeedPost, FeedSource } from "~/types/caseboard";
 import { useBoardStore } from "~/stores/board";
-import { linkifyPostText, postUriToWebUrl } from "~/utils/postFormatting.mjs";
+import { linkifyPostTextWithLinks, postUriToWebUrl } from "~/utils/postFormatting.mjs";
 
 const boardStore = useBoardStore();
 const {
@@ -1190,7 +1190,7 @@ onUnmounted(() => {
                         <img v-else class="post-media" :src="mediaItem.url" :alt="mediaItem.alt || 'Post media'" loading="lazy" />
                       </template>
                     </div>
-                    <p class="media-caption" v-html="linkifyPostText(card.post.text)"></p>
+                    <p class="media-caption" v-html="linkifyPostTextWithLinks(card.post.text, card.post.textLinks ?? [])"></p>
                     <div class="post-go-row">
                       <a
                         v-if="postUriToWebUrl(card.post)"
@@ -1223,7 +1223,7 @@ onUnmounted(() => {
                         </div>
                       </div>
                     </header>
-                    <p class="post-text" v-html="linkifyPostText(card.post.text)"></p>
+                    <p class="post-text" v-html="linkifyPostTextWithLinks(card.post.text, card.post.textLinks ?? [])"></p>
                     <time class="date">{{ formatDate(card.post.createdAt) }}</time>
                     <div class="post-go-row">
                       <a
@@ -1311,7 +1311,7 @@ onUnmounted(() => {
                   </div>
                   <span class="handle">@{{ post.authorHandle }}</span>
                 </header>
-                <p class="post-text" v-html="linkifyPostText(post.text)"></p>
+                <p class="post-text" v-html="linkifyPostTextWithLinks(post.text, post.textLinks ?? [])"></p>
                 <div v-if="post.media?.length" class="post-media-list">
                   <template v-for="mediaItem in post.media" :key="mediaItem.id">
                     <video
@@ -1397,7 +1397,7 @@ onUnmounted(() => {
                   </div>
                   <span class="handle">@{{ post.authorHandle }}</span>
                 </header>
-                <p class="post-text" v-html="linkifyPostText(post.text)"></p>
+                <p class="post-text" v-html="linkifyPostTextWithLinks(post.text, post.textLinks ?? [])"></p>
                 <div v-if="post.media?.length" class="post-media-list">
                   <template v-for="mediaItem in post.media" :key="mediaItem.id">
                     <video

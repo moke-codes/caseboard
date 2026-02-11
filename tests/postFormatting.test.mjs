@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { escapeHtml, linkifyPostText, postUriToWebUrl } from "../utils/postFormatting.mjs";
+import { escapeHtml, linkifyPostText, linkifyPostTextWithLinks, postUriToWebUrl } from "../utils/postFormatting.mjs";
 
 test("escapeHtml escapes reserved characters", () => {
   const input = `<tag attr="x">Tom & Jerry's</tag>`;
@@ -31,4 +31,17 @@ test("postUriToWebUrl maps at-uri to profile post url", () => {
 test("postUriToWebUrl returns null for invalid or missing inputs", () => {
   assert.equal(postUriToWebUrl({ uri: "", authorHandle: "npr.org" }), null);
   assert.equal(postUriToWebUrl({ uri: "at://did/app.bsky.feed.like/xyz", authorHandle: "npr.org" }), null);
+});
+
+test("linkifyPostTextWithLinks keeps shortened display text while using full href", () => {
+  const text = "Read www.test.com/... for details";
+  const html = linkifyPostTextWithLinks(text, [
+    {
+      start: 5,
+      end: 21,
+      url: "https://www.test.com/mytest",
+    },
+  ]);
+  assert.match(html, /href="https:\/\/www\.test\.com\/mytest"/);
+  assert.match(html, />www\.test\.com\/\.\.\.<\/a>/);
 });
