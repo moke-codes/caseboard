@@ -450,6 +450,12 @@ export const useBoardStore = defineStore("board", () => {
     markChanged();
   }
 
+  function deleteLink(id: string) {
+    recordBeforeMutation();
+    links.value = links.value.filter((link) => link.id !== id);
+    markChanged();
+  }
+
   function selectTargetForLink(targetId: string) {
     if (!linkMode.value) return;
     if (selectedLinkTargets.value.includes(targetId)) return;
@@ -492,6 +498,7 @@ export const useBoardStore = defineStore("board", () => {
     setLinkColor,
     setPostItColor,
     addLink,
+    deleteLink,
     selectTargetForLink,
     hydrateForHandle,
     exportBoard,

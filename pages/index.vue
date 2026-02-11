@@ -649,6 +649,11 @@ function onPostItClick(noteId: string) {
   boardStore.selectTargetForLink(`note:${noteId}`);
 }
 
+function onThreadClick(linkId: string) {
+  if (!canEditBoard.value) return;
+  boardStore.deleteLink(linkId);
+}
+
 function onThreadColorInput(event: Event) {
   if (!canEditBoard.value) return;
   const target = event.target as HTMLInputElement;
@@ -818,7 +823,7 @@ function shouldStartPan(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return true;
   return !Boolean(
     target.closest(
-      ".board-card, .postit, .postit-editor, .postit-handle, .polaroid, button, textarea, input, select",
+      ".board-card, .postit, .postit-editor, .postit-handle, .polaroid, .thread-line, button, textarea, input, select",
     ),
   );
 }
@@ -1194,6 +1199,8 @@ onUnmounted(() => {
                   :x2="line.x2"
                   :y2="line.y2"
                   :stroke="line.color"
+                  @pointerdown.stop.prevent
+                  @click.stop="onThreadClick(line.id)"
                 />
               </svg>
 
