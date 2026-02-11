@@ -1,4 +1,5 @@
 import type { PersistedBoard } from "~/types/caseboard";
+import { buildNextSharedRecord, isRecordNewer } from "~/server/utils/sharedBoardsCore.mjs";
 
 export type ShareRole = "view" | "edit";
 
@@ -51,22 +52,6 @@ function getDataStorageCandidates() {
   ];
 }
 
-function recordTimestamp(value: string | undefined) {
-  if (!value) return 0;
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function isRecordNewer(next: SharedBoardRecord, current: SharedBoardRecord | null) {
-  if (!current) return true;
-  const nextRevision = Number(next.revision ?? 0);
-  const currentRevision = Number(current.revision ?? 0);
-  if (nextRevision !== currentRevision) return nextRevision > currentRevision;
-  const nextUpdatedAt = recordTimestamp(next.updatedAt);
-  const currentUpdatedAt = recordTimestamp(current.updatedAt);
-  return nextUpdatedAt > currentUpdatedAt;
-}
-
 export async function saveShareRecord(record: SharedBoardRecord) {
   const key = storageKey(record.id);
   const storages = getDataStorageCandidates();
@@ -109,12 +94,7 @@ export function resolveRole(record: SharedBoardRecord, token: string): ShareRole
 export async function updateSharedBoard(record: SharedBoardRecord, board: PersistedBoard) {
   const newest = await getShareRecord(record.id);
   const base = newest ?? record;
-  const next: SharedBoardRecord = {
-    ...base,
-    board,
-    updatedAt: new Date().toISOString(),
-    revision: Math.max(1, Number(base.revision ?? 0)) + 1,
-  };
+  const next = buildNextSharedRecord(base, board, new Date().toISOString()) as SharedBoardRecord;
   await saveShareRecord(next);
   notifyShareRevision(next.id, next.revision);
   return next;

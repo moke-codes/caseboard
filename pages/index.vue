@@ -3,6 +3,7 @@ import { useDebounceFn, useInfiniteScroll, useLocalStorage } from "@vueuse/core"
 import type { ComponentPublicInstance } from "vue";
 import type { FeedMediaItem, FeedOption, FeedPost, FeedSource } from "~/types/caseboard";
 import { useBoardStore } from "~/stores/board";
+import { linkifyPostText, postUriToWebUrl } from "~/utils/postFormatting.mjs";
 
 const boardStore = useBoardStore();
 const { session, isRestoringSession, initSession, login, logout: logoutBluesky, getActorFeeds, getFeedPage, getPostReplies } =
@@ -172,35 +173,6 @@ const boardStageStyle = computed(() => ({
 function formatDate(value?: string) {
   if (!value) return "";
   return new Date(value).toLocaleString();
-}
-
-function postUriToWebUrl(post: FeedPost) {
-  if (!post.uri || !post.authorHandle) return null;
-  const normalizedUri = post.uri.split("#")[0];
-  const match = normalizedUri.match(/^at:\/\/[^/]+\/app\.bsky\.feed\.post\/([^/?#]+)$/);
-  if (!match) return null;
-  return `https://bsky.app/profile/${post.authorHandle}/post/${match[1]}`;
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
-function linkifyPostText(value: string) {
-  const escaped = escapeHtml(value);
-  const urlPattern = /\b((?:https?:\/\/|www\.)[^\s<]+|(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s<]*)?)/gi;
-  return escaped.replace(urlPattern, (rawUrl) => {
-    const match = rawUrl.match(/^(.*?)([.,!?;:)\]]*)$/);
-    const coreUrl = match?.[1] ?? rawUrl;
-    const trailing = match?.[2] ?? "";
-    const href = coreUrl.startsWith("http://") || coreUrl.startsWith("https://") ? coreUrl : `https://${coreUrl}`;
-    return `<a href="${href}" target="_blank" rel="noopener noreferrer">${coreUrl}</a>${trailing}`;
-  });
 }
 
 function updateBoardSize() {
