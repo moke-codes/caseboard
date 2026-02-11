@@ -664,8 +664,6 @@ button:hover:not(:disabled) {
   user-select: none;
   cursor: move;
   touch-action: none;
-  z-index: 20 !important;
-  isolation: isolate;
 }
 
 .board-card.selected .polaroid {
@@ -838,17 +836,6 @@ button:hover:not(:disabled) {
   overflow: visible;
   touch-action: none;
   padding-top: 0.45rem;
-  isolation: isolate;
-  z-index: 400 !important;
-}
-
-/* Force consistent stacking in production even if inline styles get rewritten at runtime. */
-.board-stage > .board-card {
-  z-index: 20 !important;
-}
-
-.board-stage > .postit {
-  z-index: 400 !important;
 }
 
 .postit::before {
@@ -860,7 +847,7 @@ button:hover:not(:disabled) {
     var(--postit-color, #f9e87f);
   border: 1px solid rgba(95, 74, 28, 0.42);
   box-shadow: 0 7px 15px rgba(0, 0, 0, 0.3);
-  z-index: 36;
+  z-index: 12;
 }
 
 .postit.selected::before {
@@ -889,7 +876,7 @@ button:hover:not(:disabled) {
 
 .postit-handle {
   position: relative;
-  z-index: 37;
+  z-index: 13;
   height: 24px;
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.08));
   cursor: move;
@@ -897,7 +884,7 @@ button:hover:not(:disabled) {
 
 .postit-editor {
   position: relative;
-  z-index: 37;
+  z-index: 13;
   display: block;
   width: 100%;
   border: 0;
@@ -922,7 +909,7 @@ button:hover:not(:disabled) {
 
 .postit-actions {
   position: relative;
-  z-index: 37;
+  z-index: 13;
   display: flex;
   justify-content: flex-end;
   padding: 0 0.7rem 0.45rem;
