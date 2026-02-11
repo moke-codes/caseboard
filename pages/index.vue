@@ -797,24 +797,26 @@ async function attachVideoSource(element: HTMLVideoElement, media: FeedMediaItem
     return;
   }
 
+  const hlsModule = await ensureHlsModule();
+  if (hlsModule && boundVideoUrls.get(element) === url) {
+    const Hls = hlsModule.default;
+    if (Hls.isSupported()) {
+      const hls = new Hls();
+      hls.loadSource(url);
+      hls.attachMedia(element);
+      hlsInstances.set(element, hls);
+      return;
+    }
+  }
+
   if (element.canPlayType("application/vnd.apple.mpegurl")) {
     element.src = url;
     return;
   }
 
-  const hlsModule = await ensureHlsModule();
-  if (!hlsModule || boundVideoUrls.get(element) !== url) return;
-
-  const Hls = hlsModule.default;
-  if (!Hls.isSupported()) {
-    element.src = media.previewUrl ?? "";
-    return;
-  }
-
-  const hls = new Hls();
-  hls.loadSource(url);
-  hls.attachMedia(element);
-  hlsInstances.set(element, hls);
+  // No HLS playback path is supported in this browser/runtime.
+  element.removeAttribute("src");
+  element.load();
 }
 
 function bindVideoElement(element: Element | ComponentPublicInstance | null, media: FeedMediaItem) {
