@@ -240,6 +240,8 @@ function onBoardDragOver(event: DragEvent) {
 function onBoardDrop(event: DragEvent) {
   if (!dragPayload.value || !boardDropzoneRef.value) return;
 
+  boardStore.beginHistoryBatch();
+
   const point = screenToBoardPoint(event.clientX, event.clientY);
   const baseX = Math.max(0, point.x - 100);
   const baseY = Math.max(0, point.y - 50);
@@ -250,6 +252,7 @@ function onBoardDrop(event: DragEvent) {
   if (!media.length) {
     boardStore.addCard(post, baseX, baseY);
     dragPayload.value = null;
+    boardStore.endHistoryBatch();
     return;
   }
 
@@ -283,6 +286,7 @@ function onBoardDrop(event: DragEvent) {
   });
 
   dragPayload.value = null;
+  boardStore.endHistoryBatch();
 }
 
 function addPostIt() {
@@ -304,6 +308,14 @@ function onPostItClick(noteId: string) {
 function onThreadColorInput(event: Event) {
   const target = event.target as HTMLInputElement;
   boardStore.setLinkColor(target.value);
+}
+
+function onUndo() {
+  boardStore.undo();
+}
+
+function onRedo() {
+  boardStore.redo();
 }
 
 function onPostItInput(noteId: string, event: Event) {
@@ -527,11 +539,17 @@ function initInteract() {
   interactApi(".board-card").draggable({
     inertia: true,
     listeners: {
+      start() {
+        boardStore.beginHistoryBatch();
+      },
       move(event) {
         const target = event.target as HTMLElement;
         const cardId = target.dataset.cardId;
         if (!cardId) return;
         boardStore.moveCardByDelta(cardId, event.dx / boardCamera.scale, event.dy / boardCamera.scale);
+      },
+      end() {
+        boardStore.endHistoryBatch();
       },
     },
   });
@@ -540,11 +558,17 @@ function initInteract() {
     inertia: true,
     allowFrom: ".postit-handle",
     listeners: {
+      start() {
+        boardStore.beginHistoryBatch();
+      },
       move(event) {
         const target = event.target as HTMLElement;
         const noteId = target.dataset.noteId;
         if (!noteId) return;
         boardStore.movePostItByDelta(noteId, event.dx / boardCamera.scale, event.dy / boardCamera.scale);
+      },
+      end() {
+        boardStore.endHistoryBatch();
       },
     },
   });
@@ -684,6 +708,8 @@ onUnmounted(() => {
         <section id="board-panel">
           <div class="board-toolbar">
             <button class="tool-btn" @click="addPostIt">Add Post-it</button>
+            <button class="tool-btn" :disabled="!boardStore.canUndo" @click="onUndo">Undo</button>
+            <button class="tool-btn" :disabled="!boardStore.canRedo" @click="onRedo">Redo</button>
             <button class="tool-btn" @click="openClearBoardModal">Clear Board</button>
             <label>
               Thread color

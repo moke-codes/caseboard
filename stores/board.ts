@@ -1,6 +1,6 @@
 import { useLocalStorage } from "@vueuse/core";
 import { defineStore } from "pinia";
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import type { BoardCard, FeedPost, PersistedBoard, PostIt, ThreadLink } from "~/types/caseboard";
 
 function emptyBoard(): PersistedBoard {
@@ -12,6 +12,22 @@ function emptyBoard(): PersistedBoard {
     postItSeed: 1,
     linkSeed: 1,
   };
+}
+
+interface BoardHistorySnapshot {
+  cards: BoardCard[];
+  postIts: PostIt[];
+  links: ThreadLink[];
+  cardSeed: number;
+  postItSeed: number;
+  linkSeed: number;
+  linkMode: boolean;
+  selectedLinkTargets: string[];
+  linkColor: string;
+}
+
+function cloneState<T>(state: T): T {
+  return JSON.parse(JSON.stringify(state)) as T;
 }
 
 export const useBoardStore = defineStore("board", () => {
@@ -29,6 +45,113 @@ export const useBoardStore = defineStore("board", () => {
   const cardSeed = ref(1);
   const postItSeed = ref(1);
   const linkSeed = ref(1);
+
+  const undoStack = ref<BoardHistorySnapshot[]>([]);
+  const redoStack = ref<BoardHistorySnapshot[]>([]);
+  const historyBatchDepth = ref(0);
+  const batchedBeforeSnapshot = ref<BoardHistorySnapshot | null>(null);
+  const isApplyingHistory = ref(false);
+  const HISTORY_LIMIT = 200;
+
+  const canUndo = computed(() => undoStack.value.length > 0);
+  const canRedo = computed(() => redoStack.value.length > 0);
+
+  function snapshotCurrentState(): BoardHistorySnapshot {
+    return {
+      cards: cloneState(cards.value),
+      postIts: cloneState(postIts.value),
+      links: cloneState(links.value),
+      cardSeed: cardSeed.value,
+      postItSeed: postItSeed.value,
+      linkSeed: linkSeed.value,
+      linkMode: linkMode.value,
+      selectedLinkTargets: [...selectedLinkTargets.value],
+      linkColor: linkColor.value,
+    };
+  }
+
+  function resetHistoryState() {
+    undoStack.value = [];
+    redoStack.value = [];
+    historyBatchDepth.value = 0;
+    batchedBeforeSnapshot.value = null;
+  }
+
+  function sameSnapshot(a: BoardHistorySnapshot, b: BoardHistorySnapshot) {
+    return JSON.stringify(a) === JSON.stringify(b);
+  }
+
+  function pushUndoSnapshot(snapshot: BoardHistorySnapshot) {
+    const last = undoStack.value[undoStack.value.length - 1];
+    if (last && sameSnapshot(last, snapshot)) return;
+    undoStack.value.push(snapshot);
+    if (undoStack.value.length > HISTORY_LIMIT) {
+      undoStack.value.shift();
+    }
+  }
+
+  function applySnapshot(snapshot: BoardHistorySnapshot) {
+    isApplyingHistory.value = true;
+    cards.value = cloneState(snapshot.cards);
+    postIts.value = cloneState(snapshot.postIts);
+    links.value = cloneState(snapshot.links);
+    cardSeed.value = snapshot.cardSeed;
+    postItSeed.value = snapshot.postItSeed;
+    linkSeed.value = snapshot.linkSeed;
+    linkMode.value = snapshot.linkMode;
+    selectedLinkTargets.value = [...snapshot.selectedLinkTargets];
+    linkColor.value = snapshot.linkColor;
+    isApplyingHistory.value = false;
+  }
+
+  function recordBeforeMutation() {
+    if (isApplyingHistory.value) return;
+
+    if (historyBatchDepth.value > 0) {
+      if (!batchedBeforeSnapshot.value) {
+        batchedBeforeSnapshot.value = snapshotCurrentState();
+      }
+      return;
+    }
+
+    pushUndoSnapshot(snapshotCurrentState());
+    redoStack.value = [];
+  }
+
+  function beginHistoryBatch() {
+    historyBatchDepth.value += 1;
+  }
+
+  function endHistoryBatch() {
+    if (historyBatchDepth.value === 0) return;
+    historyBatchDepth.value -= 1;
+    if (historyBatchDepth.value > 0) return;
+
+    const before = batchedBeforeSnapshot.value;
+    batchedBeforeSnapshot.value = null;
+    if (!before) return;
+
+    const after = snapshotCurrentState();
+    if (sameSnapshot(before, after)) return;
+    pushUndoSnapshot(before);
+    redoStack.value = [];
+  }
+
+  function undo() {
+    if (!undoStack.value.length) return;
+    const previous = undoStack.value.pop();
+    if (!previous) return;
+    redoStack.value.push(snapshotCurrentState());
+    applySnapshot(previous);
+  }
+
+  function redo() {
+    if (!redoStack.value.length) return;
+    const next = redoStack.value.pop();
+    if (!next) return;
+    pushUndoSnapshot(snapshotCurrentState());
+    applySnapshot(next);
+  }
 
   function persist() {
     if (!activeHandle.value) return;
@@ -57,6 +180,9 @@ export const useBoardStore = defineStore("board", () => {
       cardSeed.value = fresh.cardSeed;
       postItSeed.value = fresh.postItSeed;
       linkSeed.value = fresh.linkSeed;
+      linkMode.value = false;
+      selectedLinkTargets.value = [];
+      resetHistoryState();
       return;
     }
 
@@ -66,6 +192,9 @@ export const useBoardStore = defineStore("board", () => {
     cardSeed.value = saved.cardSeed ?? 1;
     postItSeed.value = saved.postItSeed ?? 1;
     linkSeed.value = saved.linkSeed ?? 1;
+    linkMode.value = false;
+    selectedLinkTargets.value = [];
+    resetHistoryState();
   }
 
   function resetSessionState() {
@@ -78,9 +207,11 @@ export const useBoardStore = defineStore("board", () => {
     cardSeed.value = 1;
     postItSeed.value = 1;
     linkSeed.value = 1;
+    resetHistoryState();
   }
 
   function addCard(post: FeedPost, x: number, y: number) {
+    recordBeforeMutation();
     const id = String(cardSeed.value++);
     cards.value.push({
       id,
@@ -92,6 +223,7 @@ export const useBoardStore = defineStore("board", () => {
   }
 
   function moveCardByDelta(id: string, dx: number, dy: number) {
+    recordBeforeMutation();
     const card = cards.value.find((item) => item.id === id);
     if (!card) return;
     card.x = Math.max(0, card.x + dx);
@@ -99,6 +231,7 @@ export const useBoardStore = defineStore("board", () => {
   }
 
   function addPostIt() {
+    recordBeforeMutation();
     const offset = postIts.value.length;
     postIts.value.push({
       id: String(postItSeed.value++),
@@ -115,6 +248,7 @@ export const useBoardStore = defineStore("board", () => {
   }
 
   function movePostItByDelta(id: string, dx: number, dy: number) {
+    recordBeforeMutation();
     const note = postIts.value.find((item) => item.id === id);
     if (!note) return;
     note.x = Math.max(0, note.x + dx);
@@ -122,6 +256,7 @@ export const useBoardStore = defineStore("board", () => {
   }
 
   function clearBoard() {
+    recordBeforeMutation();
     cards.value = [];
     postIts.value = [];
     links.value = [];
@@ -142,6 +277,7 @@ export const useBoardStore = defineStore("board", () => {
   }
 
   function addLink(from: string, to: string, color = linkColor.value) {
+    recordBeforeMutation();
     links.value.push({
       id: String(linkSeed.value++),
       from,
@@ -178,6 +314,12 @@ export const useBoardStore = defineStore("board", () => {
     updatePostItText,
     movePostItByDelta,
     clearBoard,
+    canUndo,
+    canRedo,
+    beginHistoryBatch,
+    endHistoryBatch,
+    undo,
+    redo,
     setLinkMode,
     setLinkColor,
     addLink,
