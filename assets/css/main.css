@@ -896,6 +896,21 @@ button:hover:not(:disabled) {
   font-size: 0.8rem;
 }
 
+.share-copy-btn {
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 90ms ease;
+}
+
+.share-copy-btn:active:not(:disabled) {
+  background: #4f5663;
+  transform: translateY(1px);
+}
+
+.share-copy-btn.copied {
+  background: #2f7d59;
+  border-color: #46a476;
+  color: #f3fff8;
+}
+
 .media-preview-modal {
   background: rgba(9, 12, 18, 0.9);
 }

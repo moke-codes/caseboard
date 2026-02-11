@@ -44,6 +44,10 @@ const shareError = ref("");
 const shareLinkView = ref("");
 const shareLinkEdit = ref("");
 const shareLoading = ref(false);
+const shareCopyState = reactive({
+  viewCopied: false,
+  editCopied: false,
+});
 const expandedImage = ref<{ url: string; alt: string } | null>(null);
 const sharedRole = ref<"view" | "edit" | null>(null);
 const sharedContext = ref<{ id: string; token: string } | null>(null);
@@ -228,7 +232,10 @@ function confirmClearBoard() {
 
 function openShareModal() {
   shareError.value = "";
+  shareLinkView.value = "";
+  shareLinkEdit.value = "";
   showShareModal.value = true;
+  void generateShareLinks();
 }
 
 function closeShareModal() {
@@ -270,6 +277,29 @@ async function copyShareLink(value: string) {
   } catch {
     // no-op
   }
+}
+
+let shareCopyResetTimer: ReturnType<typeof setTimeout> | null = null;
+
+async function onCopyShareLink(type: "view" | "edit") {
+  const value = type === "view" ? shareLinkView.value : shareLinkEdit.value;
+  if (!value) return;
+  await copyShareLink(value);
+
+  if (type === "view") {
+    shareCopyState.viewCopied = true;
+  } else {
+    shareCopyState.editCopied = true;
+  }
+
+  if (shareCopyResetTimer) {
+    clearTimeout(shareCopyResetTimer);
+  }
+  shareCopyResetTimer = setTimeout(() => {
+    shareCopyState.viewCopied = false;
+    shareCopyState.editCopied = false;
+    shareCopyResetTimer = null;
+  }, 1800);
 }
 
 function stopSharedPolling() {
@@ -953,6 +983,8 @@ async function onLogout() {
   showOnboarding.value = false;
   showClearBoardModal.value = false;
   showShareModal.value = false;
+  shareCopyState.viewCopied = false;
+  shareCopyState.editCopied = false;
 
   feedOptions.value = [{ label: "Home Timeline", value: "timeline" }];
   activeFeed.value = "timeline";
@@ -1038,8 +1070,12 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  stopBoardSubscription?.();
+    stopBoardSubscription?.();
   stopBoardSubscription = null;
+  if (shareCopyResetTimer) {
+    clearTimeout(shareCopyResetTimer);
+    shareCopyResetTimer = null;
+  }
   stopSharedPolling();
   stopSharedUploadLoop();
   window.removeEventListener("resize", updateBoardSize);
@@ -1482,22 +1518,24 @@ onUnmounted(() => {
         <p>Create links for read-only access or editor access.</p>
         <div class="modal-actions">
           <button class="secondary" :disabled="shareLoading" @click="closeShareModal">Close</button>
-          <button :disabled="shareLoading" @click="generateShareLinks">
-            {{ shareLoading ? "Generating..." : "Generate Links" }}
-          </button>
         </div>
+        <p v-if="shareLoading" class="muted">Generating links...</p>
         <p v-if="shareError" class="error">{{ shareError }}</p>
         <div v-if="shareLinkView" class="share-links">
           <label>
             Read-only
             <input :value="shareLinkView" type="text" readonly />
           </label>
-          <button class="secondary" @click="copyShareLink(shareLinkView)">Copy Read-only</button>
+          <button class="secondary share-copy-btn" :class="{ copied: shareCopyState.viewCopied }" @click="onCopyShareLink('view')">
+            {{ shareCopyState.viewCopied ? "Copy Read-only - Copied" : "Copy Read-only" }}
+          </button>
           <label>
             Editor
             <input :value="shareLinkEdit" type="text" readonly />
           </label>
-          <button class="secondary" @click="copyShareLink(shareLinkEdit)">Copy Editor</button>
+          <button class="secondary share-copy-btn" :class="{ copied: shareCopyState.editCopied }" @click="onCopyShareLink('edit')">
+            {{ shareCopyState.editCopied ? "Copy Editor - Copied" : "Copy Editor" }}
+          </button>
         </div>
       </div>
     </div>
