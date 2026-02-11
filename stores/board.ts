@@ -45,6 +45,7 @@ export const useBoardStore = defineStore("board", () => {
   const cardSeed = ref(1);
   const postItSeed = ref(1);
   const linkSeed = ref(1);
+  const changeVersion = ref(0);
 
   const undoStack = ref<BoardHistorySnapshot[]>([]);
   const redoStack = ref<BoardHistorySnapshot[]>([]);
@@ -104,6 +105,10 @@ export const useBoardStore = defineStore("board", () => {
     isApplyingHistory.value = false;
   }
 
+  function markChanged() {
+    changeVersion.value += 1;
+  }
+
   function recordBeforeMutation() {
     if (isApplyingHistory.value) return;
 
@@ -143,6 +148,7 @@ export const useBoardStore = defineStore("board", () => {
     if (!previous) return;
     redoStack.value.push(snapshotCurrentState());
     applySnapshot(previous);
+    markChanged();
   }
 
   function redo() {
@@ -151,6 +157,7 @@ export const useBoardStore = defineStore("board", () => {
     if (!next) return;
     pushUndoSnapshot(snapshotCurrentState());
     applySnapshot(next);
+    markChanged();
   }
 
   function persist() {
@@ -197,6 +204,30 @@ export const useBoardStore = defineStore("board", () => {
     resetHistoryState();
   }
 
+  function exportBoard(): PersistedBoard {
+    return {
+      cards: cloneState(cards.value),
+      postIts: cloneState(postIts.value),
+      links: cloneState(links.value),
+      cardSeed: cardSeed.value,
+      postItSeed: postItSeed.value,
+      linkSeed: linkSeed.value,
+    };
+  }
+
+  function loadExternalBoard(board: PersistedBoard) {
+    activeHandle.value = "";
+    cards.value = cloneState(board.cards ?? []);
+    postIts.value = cloneState(board.postIts ?? []);
+    links.value = cloneState(board.links ?? []);
+    cardSeed.value = board.cardSeed ?? 1;
+    postItSeed.value = board.postItSeed ?? 1;
+    linkSeed.value = board.linkSeed ?? 1;
+    linkMode.value = false;
+    selectedLinkTargets.value = [];
+    resetHistoryState();
+  }
+
   function resetSessionState() {
     activeHandle.value = "";
     cards.value = [];
@@ -219,6 +250,7 @@ export const useBoardStore = defineStore("board", () => {
       x,
       y,
     });
+    markChanged();
     return id;
   }
 
@@ -228,6 +260,7 @@ export const useBoardStore = defineStore("board", () => {
     if (!card) return;
     card.x = Math.max(0, card.x + dx);
     card.y = Math.max(0, card.y + dy);
+    markChanged();
   }
 
   function deleteCard(id: string) {
@@ -236,6 +269,7 @@ export const useBoardStore = defineStore("board", () => {
     cards.value = cards.value.filter((item) => item.id !== id);
     links.value = links.value.filter((link) => !targetIds.has(link.from) && !targetIds.has(link.to));
     selectedLinkTargets.value = selectedLinkTargets.value.filter((target) => !targetIds.has(target));
+    markChanged();
   }
 
   function addPostIt() {
@@ -247,12 +281,14 @@ export const useBoardStore = defineStore("board", () => {
       y: 26 + offset * 12,
       text: "",
     });
+    markChanged();
   }
 
   function updatePostItText(id: string, text: string) {
     const note = postIts.value.find((item) => item.id === id);
     if (!note) return;
     note.text = text;
+    markChanged();
   }
 
   function movePostItByDelta(id: string, dx: number, dy: number) {
@@ -261,6 +297,7 @@ export const useBoardStore = defineStore("board", () => {
     if (!note) return;
     note.x = Math.max(0, note.x + dx);
     note.y = Math.max(0, note.y + dy);
+    markChanged();
   }
 
   function deletePostIt(id: string) {
@@ -269,6 +306,7 @@ export const useBoardStore = defineStore("board", () => {
     postIts.value = postIts.value.filter((item) => item.id !== id);
     links.value = links.value.filter((link) => link.from !== targetId && link.to !== targetId);
     selectedLinkTargets.value = selectedLinkTargets.value.filter((target) => target !== targetId);
+    markChanged();
   }
 
   function clearBoard() {
@@ -281,6 +319,7 @@ export const useBoardStore = defineStore("board", () => {
     cardSeed.value = 1;
     postItSeed.value = 1;
     linkSeed.value = 1;
+    markChanged();
   }
 
   function setLinkMode(enabled: boolean) {
@@ -300,6 +339,7 @@ export const useBoardStore = defineStore("board", () => {
       to,
       color,
     });
+    markChanged();
   }
 
   function selectTargetForLink(targetId: string) {
@@ -321,6 +361,7 @@ export const useBoardStore = defineStore("board", () => {
     cards,
     postIts,
     links,
+    changeVersion,
     linkMode,
     linkColor,
     selectedLinkTargets,
@@ -343,6 +384,8 @@ export const useBoardStore = defineStore("board", () => {
     addLink,
     selectTargetForLink,
     hydrateForHandle,
+    exportBoard,
+    loadExternalBoard,
     resetSessionState,
   };
 });

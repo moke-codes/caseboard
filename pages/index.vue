@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useInfiniteScroll, useLocalStorage } from "@vueuse/core";
+import { useDebounceFn, useInfiniteScroll, useLocalStorage } from "@vueuse/core";
 import type { ComponentPublicInstance } from "vue";
 import type { FeedMediaItem, FeedOption, FeedPost, FeedSource } from "~/types/caseboard";
 import { useBoardStore } from "~/stores/board";
@@ -15,7 +15,9 @@ const isLoggingIn = ref(false);
 
 const showOnboarding = ref(false);
 const showClearBoardModal = ref(false);
+const showShareModal = ref(false);
 const onboardingSeen = useLocalStorage<Record<string, boolean>>("caseboard:onboarding", {});
+const route = useRoute();
 
 const feedOptions = ref<FeedOption[]>([{ label: "Home Timeline", value: "timeline" }]);
 const activeFeed = ref<FeedSource>("timeline");
@@ -26,6 +28,19 @@ const feedLoading = ref(false);
 const feedStatus = ref("Select a feed after login");
 const hydratedHandle = ref("");
 const replyViewStack = ref<{ parent: FeedPost; replies: FeedPost[] }[]>([]);
+const shareError = ref("");
+const shareLinkView = ref("");
+const shareLinkEdit = ref("");
+const shareLoading = ref(false);
+const sharedRole = ref<"view" | "edit" | null>(null);
+const sharedContext = ref<{ id: string; token: string } | null>(null);
+const sharedRevision = ref(0);
+const sharedDirty = ref(false);
+const sharedSyncInFlight = ref(false);
+const isApplyingRemoteSharedBoard = ref(false);
+const hasShareQuery = computed(
+  () => typeof route.query.share === "string" && typeof route.query.token === "string",
+);
 
 const feedListRef = ref<HTMLElement | null>(null);
 const boardDropzoneRef = ref<HTMLElement | null>(null);
@@ -55,13 +70,39 @@ const pinchStart = reactive({
 const dragPayload = ref<FeedPost | null>(null);
 let interactApi: (typeof import("interactjs"))["default"] | null = null;
 let hlsModulePromise: Promise<typeof import("hls.js") | null> | null = null;
+let sharedSyncRunId = 0;
+let sharedUploadInterval: ReturnType<typeof setInterval> | null = null;
+let stopBoardSubscription: (() => void) | null = null;
 const hlsInstances = new Map<HTMLVideoElement, { destroy: () => void }>();
 const boundVideoUrls = new WeakMap<HTMLVideoElement, string>();
 
+type SharedBoardResponse = {
+  board: ReturnType<typeof boardStore.exportBoard>;
+  role: "view" | "edit";
+  updatedAt: string;
+  revision?: number;
+};
+
+type SharedBoardChangesResponse = {
+  changed: boolean;
+  role: "view" | "edit";
+  board?: ReturnType<typeof boardStore.exportBoard>;
+  updatedAt: string;
+  revision?: number;
+};
+
 const accountLabel = computed(() => {
+  if (sharedRole.value) {
+    const roleText = sharedRole.value === "edit" ? "Editor" : "Read-only";
+    if (session.value) return `${session.value.handle} · Shared (${roleText})`;
+    return `Shared Board (${roleText})`;
+  }
   if (!session.value) return "";
   return `${session.value.handle} connected`;
 });
+
+const boardAccessActive = computed(() => Boolean(session.value) || Boolean(sharedContext.value));
+const canEditBoard = computed(() => sharedRole.value !== "view");
 
 const inReplyView = computed(() => replyViewStack.value.length > 0);
 const activeReplyParent = computed(() => {
@@ -185,6 +226,7 @@ function dismissOnboarding() {
 }
 
 function openClearBoardModal() {
+  if (!canEditBoard.value) return;
   showClearBoardModal.value = true;
 }
 
@@ -193,9 +235,183 @@ function cancelClearBoard() {
 }
 
 function confirmClearBoard() {
+  if (!canEditBoard.value) return;
   boardStore.clearBoard();
   showClearBoardModal.value = false;
 }
+
+function openShareModal() {
+  shareError.value = "";
+  showShareModal.value = true;
+}
+
+function closeShareModal() {
+  showShareModal.value = false;
+}
+
+async function generateShareLinks() {
+  shareError.value = "";
+  shareLoading.value = true;
+  try {
+    const response = await $fetch<{ id: string; viewToken: string; editToken: string }>("/api/share/create", {
+      method: "POST",
+      body: {
+        board: boardStore.exportBoard(),
+      },
+    });
+    const origin = import.meta.client ? window.location.origin : "";
+    shareLinkView.value = `${origin}/?share=${encodeURIComponent(response.id)}&token=${encodeURIComponent(response.viewToken)}`;
+    shareLinkEdit.value = `${origin}/?share=${encodeURIComponent(response.id)}&token=${encodeURIComponent(response.editToken)}`;
+    sharedContext.value = { id: response.id, token: response.editToken };
+    sharedRole.value = "edit";
+    sharedRevision.value = 1;
+    sharedDirty.value = false;
+    startSharedUploadLoop();
+    void pollSharedBoard();
+    feedStatus.value = "Sharing enabled for this board";
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not generate share links.";
+    shareError.value = message;
+  } finally {
+    shareLoading.value = false;
+  }
+}
+
+async function copyShareLink(value: string) {
+  if (!import.meta.client || !value) return;
+  try {
+    await navigator.clipboard.writeText(value);
+  } catch {
+    // no-op
+  }
+}
+
+function stopSharedPolling() {
+  sharedSyncRunId += 1;
+}
+
+function stopSharedUploadLoop() {
+  if (sharedUploadInterval === null) return;
+  clearInterval(sharedUploadInterval);
+  sharedUploadInterval = null;
+}
+
+function startSharedUploadLoop() {
+  if (!import.meta.client || !sharedContext.value || sharedRole.value !== "edit") return;
+  stopSharedUploadLoop();
+  sharedUploadInterval = setInterval(() => {
+    if (!sharedDirty.value) return;
+    void flushSharedBoardSync();
+  }, 1000);
+}
+
+async function applySharedBoard(board: ReturnType<typeof boardStore.exportBoard>, revision: number) {
+  isApplyingRemoteSharedBoard.value = true;
+  boardStore.loadExternalBoard(board);
+  sharedRevision.value = revision;
+  sharedDirty.value = false;
+  await nextTick();
+  isApplyingRemoteSharedBoard.value = false;
+}
+
+async function flushSharedBoardSync() {
+  if (!sharedContext.value || sharedRole.value !== "edit" || isApplyingRemoteSharedBoard.value || !sharedDirty.value) return;
+  if (sharedSyncInFlight.value) return;
+
+  sharedSyncInFlight.value = true;
+  try {
+    while (sharedDirty.value && sharedContext.value && sharedRole.value === "edit" && !isApplyingRemoteSharedBoard.value) {
+      sharedDirty.value = false;
+      const response = await $fetch<{ ok: boolean; updatedAt: string; revision?: number }>(
+        `/api/share/${encodeURIComponent(sharedContext.value.id)}`,
+        {
+          method: "PUT",
+          body: {
+            token: sharedContext.value.token,
+            board: boardStore.exportBoard(),
+          },
+        },
+      );
+      sharedRevision.value = Number(response.revision ?? sharedRevision.value + 1);
+    }
+  } catch (error) {
+    sharedDirty.value = true;
+  } finally {
+    sharedSyncInFlight.value = false;
+  }
+}
+
+async function pollSharedBoard() {
+  if (!import.meta.client || !sharedContext.value) return;
+  stopSharedPolling();
+  const thisRunId = sharedSyncRunId;
+  const contextAtStart = { ...sharedContext.value };
+
+  while (sharedContext.value && thisRunId === sharedSyncRunId) {
+    try {
+      const response = await $fetch<SharedBoardChangesResponse>(
+        `/api/share/${encodeURIComponent(contextAtStart.id)}/changes`,
+        {
+          query: {
+            token: contextAtStart.token,
+            since: sharedRevision.value,
+          },
+        },
+      );
+
+      if (thisRunId !== sharedSyncRunId) return;
+
+      sharedRole.value = response.role;
+      if (sharedRole.value === "edit") {
+        startSharedUploadLoop();
+      } else {
+        stopSharedUploadLoop();
+      }
+      const remoteRevision = Number(response.revision ?? sharedRevision.value);
+      if (!response.changed || !response.board || remoteRevision <= sharedRevision.value) {
+        continue;
+      }
+
+      await applySharedBoard(response.board, remoteRevision);
+      feedStatus.value = "Shared board updated";
+    } catch (error) {
+      if (thisRunId !== sharedSyncRunId) return;
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+    }
+  }
+}
+
+async function loadSharedBoardIfPresent() {
+  const shareId = typeof route.query.share === "string" ? route.query.share : "";
+  const token = typeof route.query.token === "string" ? route.query.token : "";
+  if (!shareId || !token) return false;
+
+  shareError.value = "";
+  try {
+    const response = await $fetch<SharedBoardResponse>(`/api/share/${encodeURIComponent(shareId)}`, { query: { token } });
+    sharedContext.value = { id: shareId, token };
+    sharedRole.value = response.role;
+    if (response.role === "edit") {
+      startSharedUploadLoop();
+    } else {
+      stopSharedUploadLoop();
+    }
+    showOnboarding.value = false;
+    await applySharedBoard(response.board, Number(response.revision ?? 1));
+    void pollSharedBoard();
+    feedStatus.value = "Shared board loaded";
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not load shared board.";
+    shareError.value = message;
+    stopSharedPolling();
+    return false;
+  }
+}
+
+const syncSharedBoard = useDebounceFn(async () => {
+  await flushSharedBoardSync();
+}, 250);
 
 async function loadFeedOptions() {
   if (!session.value) return;
@@ -277,6 +493,8 @@ function backReplyLevel() {
 
 async function bootstrapForSession() {
   if (!session.value) return;
+  if (hasShareQuery.value) return;
+  if (sharedContext.value) return;
   if (hydratedHandle.value === session.value.handle) return;
 
   boardStore.hydrateForHandle(session.value.handle);
@@ -292,6 +510,7 @@ async function bootstrapForSession() {
 }
 
 function onFeedDragStart(post: FeedPost, event: DragEvent) {
+  if (!session.value || !canEditBoard.value) return;
   dragPayload.value = post;
   if (!event.dataTransfer) return;
   event.dataTransfer.effectAllowed = "copy";
@@ -303,79 +522,86 @@ function onFeedDragEnd() {
 }
 
 function onBoardDragOver(event: DragEvent) {
+  if (!canEditBoard.value) return;
   if (!dragPayload.value || !event.dataTransfer) return;
   event.dataTransfer.dropEffect = "copy";
 }
 
 function onBoardDrop(event: DragEvent) {
-  if (!dragPayload.value || !boardDropzoneRef.value) return;
+  if (!canEditBoard.value || !dragPayload.value || !boardDropzoneRef.value) return;
 
   boardStore.beginHistoryBatch();
+  try {
+    const point = screenToBoardPoint(event.clientX, event.clientY);
+    const baseX = Math.max(0, point.x - 100);
+    const baseY = Math.max(0, point.y - 50);
 
-  const point = screenToBoardPoint(event.clientX, event.clientY);
-  const baseX = Math.max(0, point.x - 100);
-  const baseY = Math.max(0, point.y - 50);
+    const post = dragPayload.value;
+    const media = post.media ?? [];
 
-  const post = dragPayload.value;
-  const media = post.media ?? [];
+    if (!media.length) {
+      boardStore.addCard(post, baseX, baseY);
+      dragPayload.value = null;
+      return;
+    }
 
-  if (!media.length) {
-    boardStore.addCard(post, baseX, baseY);
-    dragPayload.value = null;
-    boardStore.endHistoryBatch();
-    return;
-  }
-
-  const textCardId = boardStore.addCard(
-    {
-      ...post,
-      media: [],
-    },
-    baseX,
-    baseY,
-  );
-
-  media.forEach((item, index) => {
-    const col = index % 2;
-    const row = Math.floor(index / 2);
-    const mediaX = baseX + 280 + col * 245;
-    const mediaY = baseY + row * 260;
-
-    const mediaCardId = boardStore.addCard(
+    const textCardId = boardStore.addCard(
       {
         ...post,
-        uri: `${post.uri ?? post.cid ?? "post"}#media-${index}`,
-        cid: `${post.cid ?? post.uri ?? "post"}-media-${index}`,
-        text: item.alt?.trim() || `${item.type.toUpperCase()} attachment`,
-        media: [item],
+        media: [],
       },
-      mediaX,
-      mediaY,
+      baseX,
+      baseY,
     );
-    boardStore.addLink(textCardId, mediaCardId);
-  });
 
-  dragPayload.value = null;
-  boardStore.endHistoryBatch();
+    media.forEach((item, index) => {
+      const col = index % 2;
+      const row = Math.floor(index / 2);
+      const mediaX = baseX + 280 + col * 245;
+      const mediaY = baseY + row * 260;
+
+      const mediaCardId = boardStore.addCard(
+        {
+          ...post,
+          uri: `${post.uri ?? post.cid ?? "post"}#media-${index}`,
+          cid: `${post.cid ?? post.uri ?? "post"}-media-${index}`,
+          text: item.alt?.trim() || `${item.type.toUpperCase()} attachment`,
+          media: [item],
+        },
+        mediaX,
+        mediaY,
+      );
+      boardStore.addLink(textCardId, mediaCardId);
+    });
+
+    dragPayload.value = null;
+  } finally {
+    boardStore.endHistoryBatch();
+  }
 }
 
 function addPostIt() {
+  if (!canEditBoard.value) return;
   boardStore.addPostIt();
 }
 
 function setLinkMode(enabled: boolean) {
+  if (!canEditBoard.value) return;
   boardStore.setLinkMode(enabled);
 }
 
 function onCardClick(cardId: string) {
+  if (!canEditBoard.value) return;
   boardStore.selectTargetForLink(`card:${cardId}`);
 }
 
 function onPostItClick(noteId: string) {
+  if (!canEditBoard.value) return;
   boardStore.selectTargetForLink(`note:${noteId}`);
 }
 
 function onThreadColorInput(event: Event) {
+  if (!canEditBoard.value) return;
   const target = event.target as HTMLInputElement;
   boardStore.setLinkColor(target.value);
 }
@@ -389,15 +615,18 @@ function onRedo() {
 }
 
 function onPostItInput(noteId: string, event: Event) {
+  if (!canEditBoard.value) return;
   const target = event.target as HTMLTextAreaElement;
   boardStore.updatePostItText(noteId, target.value);
 }
 
 function onDeleteCard(cardId: string) {
+  if (!canEditBoard.value) return;
   boardStore.deleteCard(cardId);
 }
 
 function onDeletePostIt(noteId: string) {
+  if (!canEditBoard.value) return;
   boardStore.deletePostIt(noteId);
 }
 
@@ -613,6 +842,7 @@ function initInteract() {
 
   interactApi(".board-card").unset();
   interactApi(".postit").unset();
+  if (!canEditBoard.value) return;
 
   interactApi(".board-card").draggable({
     inertia: true,
@@ -674,14 +904,24 @@ async function onLoginSubmit() {
 
 async function onLogout() {
   await logoutBluesky();
-  boardStore.resetSessionState();
-  hydratedHandle.value = "";
+  stopSharedPolling();
+  stopSharedUploadLoop();
+  sharedContext.value = null;
+  sharedRole.value = null;
+  sharedRevision.value = 0;
+  sharedDirty.value = false;
+  sharedSyncInFlight.value = false;
+  if (!sharedContext.value) {
+    boardStore.resetSessionState();
+    hydratedHandle.value = "";
+  }
 
   identifier.value = "";
   appPassword.value = "";
   loginError.value = "";
   showOnboarding.value = false;
   showClearBoardModal.value = false;
+  showShareModal.value = false;
 
   feedOptions.value = [{ label: "Home Timeline", value: "timeline" }];
   activeFeed.value = "timeline";
@@ -718,26 +958,57 @@ watch(
 );
 
 watch(
+  () => boardStore.changeVersion,
+  () => {
+    sharedDirty.value = true;
+    void syncSharedBoard();
+  },
+);
+
+watch(
+  () => canEditBoard.value,
+  async () => {
+    await nextTick();
+    initInteract();
+  },
+);
+
+watch(
   () => session.value?.handle ?? "",
   async (handle) => {
     if (!handle) return;
+    if (hasShareQuery.value) return;
     await bootstrapForSession();
   },
 );
 
 onMounted(() => {
+  stopBoardSubscription = boardStore.$subscribe(() => {
+    if (isApplyingRemoteSharedBoard.value) return;
+    sharedDirty.value = true;
+    void syncSharedBoard();
+  });
+
   void import("interactjs").then((module) => {
     interactApi = module.default;
     initInteract();
   });
-  void initSession().then(async () => {
-    await bootstrapForSession();
+  void loadSharedBoardIfPresent().then((loadedShared) => {
+    void initSession().then(async () => {
+      if (!loadedShared) {
+        await bootstrapForSession();
+      }
+    });
   });
   updateBoardSize();
   window.addEventListener("resize", updateBoardSize);
 });
 
 onUnmounted(() => {
+  stopBoardSubscription?.();
+  stopBoardSubscription = null;
+  stopSharedPolling();
+  stopSharedUploadLoop();
   window.removeEventListener("resize", updateBoardSize);
   interactApi?.(".board-card").unset();
   interactApi?.(".postit").unset();
@@ -748,7 +1019,11 @@ onUnmounted(() => {
 
 <template>
   <main>
-    <section id="login-view" class="view" :class="{ active: !session && !isRestoringSession }">
+    <section
+      id="login-view"
+      class="view"
+      :class="{ active: !session && !isRestoringSession && !sharedContext && !hasShareQuery }"
+    >
       <div class="login-card">
         <h1>CaseBoard</h1>
         <p>Log in with your Bluesky account and app password.</p>
@@ -774,7 +1049,7 @@ onUnmounted(() => {
       </div>
     </section>
 
-    <section id="board-view" class="view" :class="{ active: Boolean(session) }">
+    <section id="board-view" class="view" :class="{ active: boardAccessActive }">
       <header class="topbar">
         <div>
           <h2>Investigation Board</h2>
@@ -787,16 +1062,28 @@ onUnmounted(() => {
         <section id="board-panel">
           <div class="board-toolbar">
             <div class="toolbar-group">
-              <button class="tool-btn" @click="addPostIt">Add Post-it</button>
-              <button class="tool-btn" :disabled="!boardStore.canUndo" @click="onUndo">Undo</button>
-              <button class="tool-btn" :disabled="!boardStore.canRedo" @click="onRedo">Redo</button>
-              <button class="tool-btn tool-btn-danger" @click="openClearBoardModal">Clear Board</button>
+              <button class="tool-btn" :disabled="!canEditBoard" @click="addPostIt">Add Post-it</button>
+              <button class="tool-btn" :disabled="!canEditBoard || !boardStore.canUndo" @click="onUndo">Undo</button>
+              <button class="tool-btn" :disabled="!canEditBoard || !boardStore.canRedo" @click="onRedo">Redo</button>
+              <button class="tool-btn tool-btn-danger" :disabled="!canEditBoard" @click="openClearBoardModal">
+                Clear Board
+              </button>
+              <button class="tool-btn" @click="openShareModal">Share</button>
             </div>
             <div class="toolbar-group toolbar-group-right">
-              <button v-if="!boardStore.linkMode" class="tool-btn tool-btn-link" @click="setLinkMode(true)">Link</button>
-              <button v-else class="tool-btn tool-btn-link-active" @click="setLinkMode(false)">Cancel Linking</button>
+              <button
+                v-if="!boardStore.linkMode"
+                class="tool-btn tool-btn-link"
+                :disabled="!canEditBoard"
+                @click="setLinkMode(true)"
+              >
+                Link
+              </button>
+              <button v-else class="tool-btn tool-btn-link-active" :disabled="!canEditBoard" @click="setLinkMode(false)">
+                Cancel Linking
+              </button>
               <label class="thread-color-control" aria-label="Thread color">
-                <input :value="boardStore.linkColor" type="color" @input="onThreadColorInput" />
+                <input :value="boardStore.linkColor" :disabled="!canEditBoard" type="color" @input="onThreadColorInput" />
               </label>
             </div>
           </div>
@@ -944,7 +1231,7 @@ onUnmounted(() => {
         <aside id="feed-panel">
           <div class="feed-controls">
             <label for="feed-select">Choose feed</label>
-            <select id="feed-select" v-model="activeFeed" @change="onFeedChange">
+            <select id="feed-select" v-model="activeFeed" :disabled="!session" @change="onFeedChange">
               <option v-for="feed in feedOptions" :key="feed.value" :value="feed.value">{{ feed.label }}</option>
             </select>
           </div>
@@ -961,7 +1248,7 @@ onUnmounted(() => {
               v-for="post in visibleFeedItems"
               :key="post.uri || post.cid"
               class="feed-item"
-              draggable="true"
+              :draggable="Boolean(session) && canEditBoard"
               @dragstart="onFeedDragStart(post, $event)"
               @dragend="onFeedDragEnd"
             >
@@ -1058,6 +1345,32 @@ onUnmounted(() => {
         <div class="modal-actions">
           <button class="secondary" @click="cancelClearBoard">Cancel</button>
           <button @click="confirmClearBoard">Clear Board</button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="showShareModal" id="share-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="share-title">
+      <div class="modal-content">
+        <h3 id="share-title">Share Caseboard</h3>
+        <p>Create links for read-only access or editor access.</p>
+        <div class="modal-actions">
+          <button class="secondary" :disabled="shareLoading" @click="closeShareModal">Close</button>
+          <button :disabled="shareLoading" @click="generateShareLinks">
+            {{ shareLoading ? "Generating..." : "Generate Links" }}
+          </button>
+        </div>
+        <p v-if="shareError" class="error">{{ shareError }}</p>
+        <div v-if="shareLinkView" class="share-links">
+          <label>
+            Read-only
+            <input :value="shareLinkView" type="text" readonly />
+          </label>
+          <button class="secondary" @click="copyShareLink(shareLinkView)">Copy Read-only</button>
+          <label>
+            Editor
+            <input :value="shareLinkEdit" type="text" readonly />
+          </label>
+          <button class="secondary" @click="copyShareLink(shareLinkEdit)">Copy Editor</button>
         </div>
       </div>
     </div>
