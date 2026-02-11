@@ -652,15 +652,15 @@ button:hover:not(:disabled) {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, #fdfdff 0%, #d6d9de 58%, #959ca6 100%);
-  border: 1px solid #555d67;
+  background: radial-gradient(circle at 28% 28%, #ffd9df 0%, #e9475e 56%, #8f1727 100%);
+  border: 1px solid #6f1120;
   margin: 0 auto -8px;
   position: relative;
   z-index: 35;
   box-shadow:
     0 2px 3px rgba(0, 0, 0, 0.4),
-    inset -2px -2px 2px rgba(0, 0, 0, 0.25),
-    inset 2px 2px 2px rgba(255, 255, 255, 0.45);
+    inset -2px -2px 2px rgba(78, 8, 18, 0.35),
+    inset 2px 2px 2px rgba(255, 205, 214, 0.42);
 }
 
 .pin::before {
