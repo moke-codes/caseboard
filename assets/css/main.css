@@ -183,6 +183,14 @@ button:hover:not(:disabled) {
   gap: 0.5rem;
 }
 
+.toolbar-group-left {
+  margin-right: auto;
+}
+
+.toolbar-group-center {
+  margin: 0 auto;
+}
+
 .toolbar-group-right {
   margin-left: auto;
 }

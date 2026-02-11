@@ -1221,7 +1221,7 @@ onUnmounted(() => {
       <div class="workspace">
         <section id="board-panel">
           <div class="board-toolbar">
-            <div class="toolbar-group">
+            <div class="toolbar-group toolbar-group-left">
               <button class="tool-btn" :disabled="!canEditBoard" @click="addPostIt">Post-it</button>
               <label class="thread-color-control postit-color-control" aria-label="Post-it color">
                 <input
@@ -1231,14 +1231,6 @@ onUnmounted(() => {
                   @input="onPostItColorInput"
                 />
               </label>
-              <button class="tool-btn" :disabled="!canEditBoard || !boardStore.canUndo" @click="onUndo">Undo</button>
-              <button class="tool-btn" :disabled="!canEditBoard || !boardStore.canRedo" @click="onRedo">Redo</button>
-              <button class="tool-btn tool-btn-danger" :disabled="!canEditBoard" @click="openClearBoardModal">
-                Clear Board
-              </button>
-              <button class="tool-btn" @click="openShareModal">Share</button>
-            </div>
-            <div class="toolbar-group toolbar-group-right">
               <button
                 v-if="!boardStore.linkMode"
                 class="tool-btn tool-btn-link"
@@ -1253,6 +1245,16 @@ onUnmounted(() => {
               <label class="thread-color-control" aria-label="Thread color">
                 <input :value="boardStore.linkColor" :disabled="!canEditBoard" type="color" @input="onThreadColorInput" />
               </label>
+            </div>
+            <div class="toolbar-group toolbar-group-center">
+              <button class="tool-btn" :disabled="!canEditBoard || !boardStore.canUndo" @click="onUndo">Undo</button>
+              <button class="tool-btn" :disabled="!canEditBoard || !boardStore.canRedo" @click="onRedo">Redo</button>
+            </div>
+            <div class="toolbar-group toolbar-group-right">
+              <button class="tool-btn" @click="openShareModal">Share</button>
+              <button class="tool-btn tool-btn-danger" :disabled="!canEditBoard" @click="openClearBoardModal">
+                Clear Board
+              </button>
             </div>
           </div>
 
