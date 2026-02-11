@@ -292,7 +292,7 @@ button:hover:not(:disabled) {
   inset: 0;
   width: 100%;
   height: 100%;
-  pointer-events: auto;
+  pointer-events: none;
   overflow: visible;
   z-index: 34;
 }
@@ -317,6 +317,13 @@ button:hover:not(:disabled) {
   filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.45));
   pointer-events: stroke;
   cursor: pointer;
+}
+
+.thread-line-preview {
+  stroke-dasharray: 8 6;
+  opacity: 0.92;
+  pointer-events: none;
+  cursor: default;
 }
 
 #feed-panel {
@@ -655,6 +662,16 @@ button:hover:not(:disabled) {
   outline: 3px dashed #67d2ff;
 }
 
+.board-card.link-hover .polaroid {
+  outline: 3px solid #ffd26f;
+  outline-offset: 2px;
+}
+
+.board-card.link-source .polaroid {
+  outline: 3px solid #8ec9ff;
+  outline-offset: 2px;
+}
+
 .pin {
   width: 18px;
   height: 18px;
@@ -668,6 +685,44 @@ button:hover:not(:disabled) {
     0 2px 3px rgba(0, 0, 0, 0.4),
     inset -2px -2px 2px rgba(78, 8, 18, 0.35),
     inset 2px 2px 2px rgba(255, 205, 214, 0.42);
+}
+
+.pin-link-btn {
+  position: absolute;
+  right: -7px;
+  top: -7px;
+  width: 14px;
+  height: 14px;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font-size: 0.7rem;
+  line-height: 1;
+  color: #fff;
+  background: rgba(26, 29, 35, 0.72);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.38);
+  opacity: 0;
+  transform: translateY(-1px) scale(0.92);
+  transition: opacity 120ms ease, transform 120ms ease, background 120ms ease;
+  pointer-events: none;
+}
+
+.pin:hover .pin-link-btn,
+.pin:focus-within .pin-link-btn {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.pin-link-btn:hover:not(:disabled) {
+  background: rgba(37, 44, 54, 0.95);
+}
+
+.pin-link-btn:disabled {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .pin::before {
@@ -789,6 +844,16 @@ button:hover:not(:disabled) {
 
 .postit.selected::before {
   outline: 3px dashed #67d2ff;
+  outline-offset: 2px;
+}
+
+.postit.link-hover::before {
+  outline: 3px solid #ffd26f;
+  outline-offset: 2px;
+}
+
+.postit.link-source::before {
+  outline: 3px solid #8ec9ff;
   outline-offset: 2px;
 }
 

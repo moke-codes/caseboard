@@ -71,6 +71,13 @@ const boardCamera = reactive({
   maxScale: 2.4,
 });
 const boardIsPanning = ref(false);
+const quickLinkSource = ref<string | null>(null);
+const quickLinkHoverTarget = ref<string | null>(null);
+const quickLinkPointer = reactive({
+  x: 0,
+  y: 0,
+  inside: false,
+});
 
 const activePointers = new Map<number, { x: number; y: number }>();
 const panPointerId = ref<number | null>(null);
@@ -133,36 +140,36 @@ const displayedFeedItems = computed(() => {
   return replyViewStack.value[replyViewStack.value.length - 1].replies;
 });
 
-const renderedThreads = computed(() => {
-  const cardWidth = 230;
-  const pinCenterY = 10;
-  const postItWidth = 180;
-  const postItPinCenterY = 0;
+const BOARD_CARD_WIDTH = 230;
+const BOARD_CARD_PIN_CENTER_Y = 10;
+const POSTIT_WIDTH = 180;
+const POSTIT_PIN_CENTER_Y = 0;
 
-  const resolveTarget = (target: string) => {
-    if (target.startsWith("note:")) {
-      const noteId = target.slice(5);
-      const note = boardStore.postIts.find((item) => item.id === noteId);
-      if (!note) return null;
-      return {
-        x: note.x + postItWidth / 2,
-        y: note.y + postItPinCenterY,
-      };
-    }
-
-    const cardId = target.startsWith("card:") ? target.slice(5) : target;
-    const card = boardStore.cards.find((item) => item.id === cardId);
-    if (!card) return null;
+function resolveBoardTargetPoint(target: string) {
+  if (target.startsWith("note:")) {
+    const noteId = target.slice(5);
+    const note = boardStore.postIts.find((item) => item.id === noteId);
+    if (!note) return null;
     return {
-      x: card.x + cardWidth / 2,
-      y: card.y + pinCenterY,
+      x: note.x + POSTIT_WIDTH / 2,
+      y: note.y + POSTIT_PIN_CENTER_Y,
     };
-  };
+  }
 
+  const cardId = target.startsWith("card:") ? target.slice(5) : target;
+  const card = boardStore.cards.find((item) => item.id === cardId);
+  if (!card) return null;
+  return {
+    x: card.x + BOARD_CARD_WIDTH / 2,
+    y: card.y + BOARD_CARD_PIN_CENTER_Y,
+  };
+}
+
+const renderedThreads = computed(() => {
   return boardStore.links
     .map((link) => {
-      const from = resolveTarget(link.from);
-      const to = resolveTarget(link.to);
+      const from = resolveBoardTargetPoint(link.from);
+      const to = resolveBoardTargetPoint(link.to);
       if (!from || !to) return null;
 
       return {
@@ -180,6 +187,19 @@ const renderedThreads = computed(() => {
       ): line is { id: string; color: string; x1: number; y1: number; x2: number; y2: number } =>
         line !== null,
     );
+});
+
+const quickLinkPreview = computed(() => {
+  if (!quickLinkSource.value || !quickLinkPointer.inside) return null;
+  const from = resolveBoardTargetPoint(quickLinkSource.value);
+  if (!from) return null;
+  return {
+    x1: from.x,
+    y1: from.y,
+    x2: quickLinkPointer.x,
+    y2: quickLinkPointer.y,
+    color: boardStore.linkColor,
+  };
 });
 
 const boardStageStyle = computed(() => ({
@@ -640,13 +660,54 @@ function setLinkMode(enabled: boolean) {
 }
 
 function onCardClick(cardId: string) {
+  if (quickLinkSource.value) {
+    const target = `card:${cardId}`;
+    if (target !== quickLinkSource.value) {
+      boardStore.addLink(quickLinkSource.value, target);
+      quickLinkSource.value = null;
+      quickLinkHoverTarget.value = null;
+      quickLinkPointer.inside = false;
+    }
+    return;
+  }
   if (!canEditBoard.value) return;
   boardStore.selectTargetForLink(`card:${cardId}`);
 }
 
 function onPostItClick(noteId: string) {
+  if (quickLinkSource.value) {
+    const target = `note:${noteId}`;
+    if (target !== quickLinkSource.value) {
+      boardStore.addLink(quickLinkSource.value, target);
+      quickLinkSource.value = null;
+      quickLinkHoverTarget.value = null;
+      quickLinkPointer.inside = false;
+    }
+    return;
+  }
   if (!canEditBoard.value) return;
   boardStore.selectTargetForLink(`note:${noteId}`);
+}
+
+function beginQuickLink(source: string, event: MouseEvent) {
+  if (!canEditBoard.value) return;
+  quickLinkSource.value = source;
+  quickLinkHoverTarget.value = null;
+  if (boardStore.linkMode) {
+    boardStore.setLinkMode(false);
+  }
+  const point = screenToBoardPoint(event.clientX, event.clientY);
+  quickLinkPointer.x = point.x;
+  quickLinkPointer.y = point.y;
+  quickLinkPointer.inside = true;
+}
+
+function onBoardTargetHover(target: string | null) {
+  if (!quickLinkSource.value || !target || target === quickLinkSource.value) {
+    quickLinkHoverTarget.value = null;
+    return;
+  }
+  quickLinkHoverTarget.value = target;
 }
 
 function onThreadClick(linkId: string) {
@@ -823,7 +884,7 @@ function shouldStartPan(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return true;
   return !Boolean(
     target.closest(
-      ".board-card, .postit, .postit-editor, .postit-handle, .polaroid, .thread-line, button, textarea, input, select",
+      ".board-card, .postit, .postit-editor, .postit-handle, .polaroid, .thread-line, .pin-link-btn, button, textarea, input, select",
     ),
   );
 }
@@ -860,6 +921,13 @@ function onBoardPointerDown(event: PointerEvent) {
 }
 
 function onBoardPointerMove(event: PointerEvent) {
+  if (quickLinkSource.value) {
+    const point = screenToBoardPoint(event.clientX, event.clientY);
+    quickLinkPointer.x = point.x;
+    quickLinkPointer.y = point.y;
+    quickLinkPointer.inside = true;
+  }
+
   if (!activePointers.has(event.pointerId)) return;
   activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
 
@@ -897,6 +965,12 @@ function onBoardPointerUp(event: PointerEvent) {
     lastPanPoint.x = point.x;
     lastPanPoint.y = point.y;
   }
+}
+
+function onBoardPointerLeave() {
+  if (!quickLinkSource.value) return;
+  quickLinkPointer.inside = false;
+  quickLinkHoverTarget.value = null;
 }
 
 function onBoardWheel(event: WheelEvent) {
@@ -983,6 +1057,9 @@ async function onLogout() {
   sharedRevision.value = 0;
   sharedDirty.value = false;
   sharedSyncInFlight.value = false;
+  quickLinkSource.value = null;
+  quickLinkHoverTarget.value = null;
+  quickLinkPointer.inside = false;
   if (!sharedContext.value) {
     boardStore.resetSessionState();
     hydratedHandle.value = "";
@@ -1089,6 +1166,9 @@ onUnmounted(() => {
   }
   stopSharedPolling();
   stopSharedUploadLoop();
+  quickLinkSource.value = null;
+  quickLinkHoverTarget.value = null;
+  quickLinkPointer.inside = false;
   window.removeEventListener("resize", updateBoardSize);
   interactApi?.(".board-card").unset();
   interactApi?.(".postit").unset();
@@ -1186,6 +1266,7 @@ onUnmounted(() => {
             @pointermove="onBoardPointerMove"
             @pointerup="onBoardPointerUp"
             @pointercancel="onBoardPointerUp"
+            @pointerleave="onBoardPointerLeave"
             @wheel="onBoardWheel"
           >
             <div class="board-stage" :style="boardStageStyle">
@@ -1202,6 +1283,15 @@ onUnmounted(() => {
                   @pointerdown.stop.prevent
                   @click.stop="onThreadClick(line.id)"
                 />
+                <line
+                  v-if="quickLinkPreview"
+                  class="thread-line thread-line-preview"
+                  :x1="quickLinkPreview.x1"
+                  :y1="quickLinkPreview.y1"
+                  :x2="quickLinkPreview.x2"
+                  :y2="quickLinkPreview.y2"
+                  :stroke="quickLinkPreview.color"
+                />
               </svg>
 
               <article
@@ -1211,12 +1301,26 @@ onUnmounted(() => {
                 :class="{
                   selected: boardStore.selectedLinkTargets.includes(`card:${card.id}`),
                   'media-card': Boolean(card.post.media?.length),
+                  'link-hover': quickLinkHoverTarget === `card:${card.id}`,
+                  'link-source': quickLinkSource === `card:${card.id}`,
                 }"
                 :data-card-id="card.id"
                 :style="{ left: `${card.x}px`, top: `${card.y}px` }"
                 @click="onCardClick(card.id)"
+                @mouseenter="onBoardTargetHover(`card:${card.id}`)"
+                @mouseleave="onBoardTargetHover(null)"
               >
-                <div class="pin" aria-hidden="true"></div>
+                <div class="pin" aria-hidden="true">
+                  <button
+                    class="pin-link-btn"
+                    type="button"
+                    title="Start link"
+                    :disabled="!canEditBoard"
+                    @click.stop.prevent="beginQuickLink(`card:${card.id}`, $event)"
+                  >
+                    +
+                  </button>
+                </div>
                 <div class="polaroid">
                   <template v-if="card.post.media?.length">
                     <div class="polaroid-photo">
@@ -1301,12 +1405,28 @@ onUnmounted(() => {
                 v-for="note in boardStore.postIts"
                 :key="note.id"
                 class="postit"
-                :class="{ selected: boardStore.selectedLinkTargets.includes(`note:${note.id}`) }"
+                :class="{
+                  selected: boardStore.selectedLinkTargets.includes(`note:${note.id}`),
+                  'link-hover': quickLinkHoverTarget === `note:${note.id}`,
+                  'link-source': quickLinkSource === `note:${note.id}`,
+                }"
                 :data-note-id="note.id"
                 :style="{ left: `${note.x}px`, top: `${note.y}px`, '--postit-color': note.color }"
                 @click.stop="onPostItClick(note.id)"
+                @mouseenter="onBoardTargetHover(`note:${note.id}`)"
+                @mouseleave="onBoardTargetHover(null)"
               >
-                <div class="pin pin-postit" aria-hidden="true"></div>
+                <div class="pin pin-postit" aria-hidden="true">
+                  <button
+                    class="pin-link-btn"
+                    type="button"
+                    title="Start link"
+                    :disabled="!canEditBoard"
+                    @click.stop.prevent="beginQuickLink(`note:${note.id}`, $event)"
+                  >
+                    +
+                  </button>
+                </div>
                 <div class="postit-handle"></div>
                 <textarea
                   class="postit-editor"
