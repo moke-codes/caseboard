@@ -6,8 +6,17 @@ import { useBoardStore } from "~/stores/board";
 import { linkifyPostText, postUriToWebUrl } from "~/utils/postFormatting.mjs";
 
 const boardStore = useBoardStore();
-const { session, isRestoringSession, initSession, login, logout: logoutBluesky, getActorFeeds, getFeedPage, getPostReplies } =
-  useBluesky();
+const {
+  session,
+  isRestoringSession,
+  initSession,
+  login,
+  logout: logoutBluesky,
+  getActorFeeds,
+  getFeedPage,
+  getPostReplies,
+  searchPosts,
+} = useBluesky();
 
 const identifier = ref("");
 const appPassword = ref("");
@@ -27,6 +36,8 @@ const feedCursor = ref<string | null>(null);
 const feedHasMore = ref(true);
 const feedLoading = ref(false);
 const feedStatus = ref("Select a feed after login");
+const feedMode = ref<"feed" | "search">("feed");
+const searchQuery = ref("");
 const hydratedHandle = ref("");
 const replyViewStack = ref<{ parent: FeedPost; replies: FeedPost[] }[]>([]);
 const shareError = ref("");
@@ -104,13 +115,15 @@ const accountLabel = computed(() => {
 
 const boardAccessActive = computed(() => Boolean(session.value) || Boolean(sharedContext.value));
 const canEditBoard = computed(() => sharedRole.value !== "view");
+const isSearchMode = computed(() => feedMode.value === "search");
 
 const inReplyView = computed(() => replyViewStack.value.length > 0);
 const activeReplyParent = computed(() => {
   if (!replyViewStack.value.length) return null;
   return replyViewStack.value[replyViewStack.value.length - 1].parent;
 });
-const visibleFeedItems = computed(() => {
+const displayedFeedItems = computed(() => {
+  if (isSearchMode.value) return feedItems.value;
   if (!replyViewStack.value.length) return feedItems.value;
   return replyViewStack.value[replyViewStack.value.length - 1].replies;
 });
@@ -406,30 +419,61 @@ async function loadMorePosts() {
   if (!session.value || feedLoading.value || !feedHasMore.value) return;
 
   feedLoading.value = true;
-  feedStatus.value = "Loading posts...";
+  feedStatus.value = isSearchMode.value ? `Searching "${searchQuery.value.trim()}"...` : "Loading posts...";
 
   try {
-    const page = await getFeedPage(activeFeed.value, feedCursor.value);
+    const page = isSearchMode.value
+      ? await searchPosts(searchQuery.value, feedCursor.value)
+      : await getFeedPage(activeFeed.value, feedCursor.value);
     feedItems.value = [...feedItems.value, ...page.posts];
     feedCursor.value = page.cursor;
     feedHasMore.value = Boolean(page.cursor);
 
     if (!feedItems.value.length) {
-      feedStatus.value = "No posts available in this feed.";
+      feedStatus.value = isSearchMode.value ? "No posts found for this search." : "No posts available in this feed.";
     } else if (feedHasMore.value) {
-      feedStatus.value = "Scroll for more posts";
+      feedStatus.value = isSearchMode.value ? "Scroll for more search results" : "Scroll for more posts";
     } else {
-      feedStatus.value = "End of feed";
+      feedStatus.value = isSearchMode.value ? "End of search results" : "End of feed";
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Could not load feed.";
-    feedStatus.value = `Could not load feed: ${message}`;
+    const message = error instanceof Error ? error.message : "Could not load posts.";
+    feedStatus.value = isSearchMode.value ? `Could not search posts: ${message}` : `Could not load feed: ${message}`;
   } finally {
     feedLoading.value = false;
   }
 }
 
 async function onFeedChange() {
+  feedMode.value = "feed";
+  searchQuery.value = "";
+  resetFeedState();
+  await loadMorePosts();
+}
+
+function openSearchPanel() {
+  if (!session.value) return;
+  feedMode.value = "search";
+  replyViewStack.value = [];
+  resetFeedState();
+  feedStatus.value = "Search posts on Bluesky";
+}
+
+async function onSearchSubmit() {
+  if (!session.value || feedLoading.value) return;
+  const query = searchQuery.value.trim();
+  if (!query) {
+    await backToFeedPanel();
+    return;
+  }
+  feedMode.value = "search";
+  resetFeedState();
+  await loadMorePosts();
+}
+
+async function backToFeedPanel() {
+  searchQuery.value = "";
+  feedMode.value = "feed";
   resetFeedState();
   await loadMorePosts();
 }
@@ -473,6 +517,8 @@ async function bootstrapForSession() {
   openOnboardingIfFirstTime();
   await loadFeedOptions();
   activeFeed.value = "timeline";
+  feedMode.value = "feed";
+  searchQuery.value = "";
   resetFeedState();
   await loadMorePosts();
   hydratedHandle.value = session.value.handle;
@@ -897,6 +943,8 @@ async function onLogout() {
 
   feedOptions.value = [{ label: "Home Timeline", value: "timeline" }];
   activeFeed.value = "timeline";
+  feedMode.value = "feed";
+  searchQuery.value = "";
   feedItems.value = [];
   feedCursor.value = null;
   feedHasMore.value = true;
@@ -1201,84 +1249,163 @@ onUnmounted(() => {
         </section>
 
         <aside id="feed-panel">
-          <div class="feed-controls">
-            <label for="feed-select">Choose feed</label>
-            <select id="feed-select" v-model="activeFeed" :disabled="!session" @change="onFeedChange">
-              <option v-for="feed in feedOptions" :key="feed.value" :value="feed.value">{{ feed.label }}</option>
-            </select>
-          </div>
+          <template v-if="!isSearchMode">
+            <div class="feed-toolbar">
+              <div class="feed-toolbar-group">
+                <label for="feed-select">Feed</label>
+                <select id="feed-select" v-model="activeFeed" :disabled="!session" @change="onFeedChange">
+                  <option v-for="feed in feedOptions" :key="feed.value" :value="feed.value">{{ feed.label }}</option>
+                </select>
+              </div>
+              <button class="feed-toolbar-link" :disabled="!session" @click="openSearchPanel">Search</button>
+            </div>
 
-          <div v-if="inReplyView" class="reply-nav">
-            <button class="secondary" @click="backReplyLevel">&larr; Post</button>
-            <p class="muted">
-              Replies to {{ activeReplyParent?.authorDisplayName || "post" }}
-            </p>
-          </div>
+            <div v-if="inReplyView" class="reply-nav">
+              <button class="secondary" @click="backReplyLevel">&larr; Post</button>
+              <p class="muted">
+                Replies to {{ activeReplyParent?.authorDisplayName || "post" }}
+              </p>
+            </div>
 
-          <div id="feed-list" ref="feedListRef">
-            <article
-              v-for="post in visibleFeedItems"
-              :key="post.uri || post.cid"
-              class="feed-item"
-              :draggable="Boolean(session) && canEditBoard"
-              @dragstart="onFeedDragStart(post, $event)"
-              @dragend="onFeedDragEnd"
-            >
-              <header>
-                <div class="author-line">
-                  <img
-                    v-if="post.authorAvatar"
-                    class="author-avatar"
-                    :src="post.authorAvatar"
-                    :alt="`${post.authorDisplayName} avatar`"
-                    loading="lazy"
-                    referrerpolicy="no-referrer"
-                  />
-                  <div v-else class="author-avatar avatar-fallback" aria-hidden="true">
-                    {{ post.authorDisplayName.slice(0, 1).toUpperCase() }}
+            <div id="feed-list" ref="feedListRef">
+              <article
+                v-for="post in displayedFeedItems"
+                :key="post.uri || post.cid"
+                class="feed-item"
+                :draggable="Boolean(session) && canEditBoard"
+                @dragstart="onFeedDragStart(post, $event)"
+                @dragend="onFeedDragEnd"
+              >
+                <header>
+                  <div class="author-line">
+                    <img
+                      v-if="post.authorAvatar"
+                      class="author-avatar"
+                      :src="post.authorAvatar"
+                      :alt="`${post.authorDisplayName} avatar`"
+                      loading="lazy"
+                      referrerpolicy="no-referrer"
+                    />
+                    <div v-else class="author-avatar avatar-fallback" aria-hidden="true">
+                      {{ post.authorDisplayName.slice(0, 1).toUpperCase() }}
+                    </div>
+                    <strong>{{ post.authorDisplayName }}</strong>
                   </div>
-                  <strong>{{ post.authorDisplayName }}</strong>
+                  <span class="handle">@{{ post.authorHandle }}</span>
+                </header>
+                <p class="post-text" v-html="linkifyPostText(post.text)"></p>
+                <div v-if="post.media?.length" class="post-media-list">
+                  <template v-for="mediaItem in post.media" :key="mediaItem.id">
+                    <video
+                      v-if="isVideoLikeMedia(mediaItem)"
+                      class="post-media"
+                      :ref="(element) => bindVideoElement(element, mediaItem)"
+                      :poster="mediaItem.previewUrl"
+                      :controls="mediaItem.type !== 'gif'"
+                      :autoplay="mediaItem.type === 'gif'"
+                      :loop="mediaItem.type === 'gif'"
+                      muted
+                      playsinline
+                      preload="metadata"
+                    ></video>
+                    <img
+                      v-else
+                      class="post-media"
+                      :src="mediaItem.url"
+                      :alt="mediaItem.alt || 'Post media'"
+                      loading="lazy"
+                    />
+                  </template>
                 </div>
-                <span class="handle">@{{ post.authorHandle }}</span>
-              </header>
-              <p class="post-text" v-html="linkifyPostText(post.text)"></p>
-              <div v-if="post.media?.length" class="post-media-list">
-                <template v-for="mediaItem in post.media" :key="mediaItem.id">
-                  <video
-                    v-if="isVideoLikeMedia(mediaItem)"
-                    class="post-media"
-                    :ref="(element) => bindVideoElement(element, mediaItem)"
-                    :poster="mediaItem.previewUrl"
-                    :controls="mediaItem.type !== 'gif'"
-                    :autoplay="mediaItem.type === 'gif'"
-                    :loop="mediaItem.type === 'gif'"
-                    muted
-                    playsinline
-                    preload="metadata"
-                  ></video>
-                  <img
-                    v-else
-                    class="post-media"
-                    :src="mediaItem.url"
-                    :alt="mediaItem.alt || 'Post media'"
-                    loading="lazy"
-                  />
-                </template>
-              </div>
-              <div class="feed-item-meta">
-                <time class="date">{{ formatDate(post.createdAt) }}</time>
-                <button
-                  v-if="post.uri && (post.replyCount ?? 0) > 0"
-                  class="reply-link"
-                  @click.stop="openReplies(post)"
-                >
-                  View replies ({{ post.replyCount }})
-                </button>
-              </div>
-            </article>
-          </div>
+                <div class="feed-item-meta">
+                  <time class="date">{{ formatDate(post.createdAt) }}</time>
+                  <button
+                    v-if="post.uri && (post.replyCount ?? 0) > 0"
+                    class="reply-link"
+                    @click.stop="openReplies(post)"
+                  >
+                    View replies ({{ post.replyCount }})
+                  </button>
+                </div>
+              </article>
+            </div>
 
-          <p id="feed-status" class="muted">{{ feedStatus }}</p>
+            <p id="feed-status" class="muted">{{ feedStatus }}</p>
+          </template>
+
+          <template v-else>
+            <div class="search-panel-head">
+              <button class="reply-link back-link" :disabled="feedLoading" @click="backToFeedPanel">&larr; Back</button>
+              <form class="feed-search" @submit.prevent="onSearchSubmit">
+                <input
+                  v-model.trim="searchQuery"
+                  type="text"
+                  :disabled="!session"
+                  placeholder="Search Bluesky posts..."
+                  aria-label="Search Bluesky posts"
+                />
+                <button class="tool-btn" type="submit" :disabled="!session || feedLoading || !searchQuery">Search</button>
+              </form>
+            </div>
+
+            <div id="feed-list" ref="feedListRef">
+              <article
+                v-for="post in feedItems"
+                :key="post.uri || post.cid"
+                class="feed-item"
+                :draggable="Boolean(session) && canEditBoard"
+                @dragstart="onFeedDragStart(post, $event)"
+                @dragend="onFeedDragEnd"
+              >
+                <header>
+                  <div class="author-line">
+                    <img
+                      v-if="post.authorAvatar"
+                      class="author-avatar"
+                      :src="post.authorAvatar"
+                      :alt="`${post.authorDisplayName} avatar`"
+                      loading="lazy"
+                      referrerpolicy="no-referrer"
+                    />
+                    <div v-else class="author-avatar avatar-fallback" aria-hidden="true">
+                      {{ post.authorDisplayName.slice(0, 1).toUpperCase() }}
+                    </div>
+                    <strong>{{ post.authorDisplayName }}</strong>
+                  </div>
+                  <span class="handle">@{{ post.authorHandle }}</span>
+                </header>
+                <p class="post-text" v-html="linkifyPostText(post.text)"></p>
+                <div v-if="post.media?.length" class="post-media-list">
+                  <template v-for="mediaItem in post.media" :key="mediaItem.id">
+                    <video
+                      v-if="isVideoLikeMedia(mediaItem)"
+                      class="post-media"
+                      :ref="(element) => bindVideoElement(element, mediaItem)"
+                      :poster="mediaItem.previewUrl"
+                      :controls="mediaItem.type !== 'gif'"
+                      :autoplay="mediaItem.type === 'gif'"
+                      :loop="mediaItem.type === 'gif'"
+                      muted
+                      playsinline
+                      preload="metadata"
+                    ></video>
+                    <img
+                      v-else
+                      class="post-media"
+                      :src="mediaItem.url"
+                      :alt="mediaItem.alt || 'Post media'"
+                      loading="lazy"
+                    />
+                  </template>
+                </div>
+                <div class="feed-item-meta">
+                  <time class="date">{{ formatDate(post.createdAt) }}</time>
+                </div>
+              </article>
+            </div>
+
+            <p id="feed-status" class="muted">{{ feedStatus }}</p>
+          </template>
         </aside>
       </div>
     </section>

@@ -311,6 +311,14 @@ function normalizePost(entry: RawFeedEntry): FeedPost {
   );
 }
 
+function normalizeSearchPost(entry: unknown): FeedPost | null {
+  const candidate = asRecord(entry);
+  if (!candidate) return null;
+  const rawPost = candidate.post ? asRecord(candidate.post) : candidate;
+  if (!rawPost) return null;
+  return normalizePostFromRecord(rawPost);
+}
+
 export function useBluesky() {
   const agent = useState<BskyAgent | null>("bsky:agent", () => null);
   const session = useState<SessionIdentity | null>("bsky:session", () => null);
@@ -504,6 +512,32 @@ export function useBluesky() {
     return parsed;
   }
 
+  async function searchPosts(query: string, cursor: string | null): Promise<FeedPage> {
+    if (!agent.value) {
+      throw new Error("Not authenticated");
+    }
+
+    const trimmed = query.trim();
+    if (!trimmed) {
+      return { posts: [], cursor: null };
+    }
+
+    const response = await agent.value.app.bsky.feed.searchPosts({
+      q: trimmed,
+      limit: 20,
+      cursor: cursor ?? undefined,
+    });
+
+    const posts = (response.data.posts ?? [])
+      .map((entry) => normalizeSearchPost(entry))
+      .filter((post): post is FeedPost => post !== null);
+
+    return {
+      posts,
+      cursor: response.data.cursor ?? null,
+    };
+  }
+
   return {
     session,
     isRestoringSession,
@@ -513,5 +547,6 @@ export function useBluesky() {
     getActorFeeds,
     getFeedPage,
     getPostReplies,
+    searchPosts,
   };
 }
