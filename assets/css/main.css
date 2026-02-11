@@ -664,6 +664,7 @@ button:hover:not(:disabled) {
   user-select: none;
   cursor: move;
   touch-action: none;
+  z-index: 20;
 }
 
 .board-card.selected .polaroid {
@@ -837,6 +838,7 @@ button:hover:not(:disabled) {
   touch-action: none;
   padding-top: 0.45rem;
   isolation: isolate;
+  z-index: 40;
 }
 
 .postit::before {
