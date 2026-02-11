@@ -65,20 +65,42 @@ const accountLabel = computed(() => {
 const renderedThreads = computed(() => {
   const cardWidth = 230;
   const pinCenterY = 10;
+  const postItWidth = 180;
+  const postItPinCenterY = 0;
+
+  const resolveTarget = (target: string) => {
+    if (target.startsWith("note:")) {
+      const noteId = target.slice(5);
+      const note = boardStore.postIts.find((item) => item.id === noteId);
+      if (!note) return null;
+      return {
+        x: note.x + postItWidth / 2,
+        y: note.y + postItPinCenterY,
+      };
+    }
+
+    const cardId = target.startsWith("card:") ? target.slice(5) : target;
+    const card = boardStore.cards.find((item) => item.id === cardId);
+    if (!card) return null;
+    return {
+      x: card.x + cardWidth / 2,
+      y: card.y + pinCenterY,
+    };
+  };
 
   return boardStore.links
     .map((link) => {
-      const from = boardStore.cards.find((card) => card.id === link.from);
-      const to = boardStore.cards.find((card) => card.id === link.to);
+      const from = resolveTarget(link.from);
+      const to = resolveTarget(link.to);
       if (!from || !to) return null;
 
       return {
         id: link.id,
         color: link.color,
-        x1: from.x + cardWidth / 2,
-        y1: from.y + pinCenterY,
-        x2: to.x + cardWidth / 2,
-        y2: to.y + pinCenterY,
+        x1: from.x,
+        y1: from.y,
+        x2: to.x,
+        y2: to.y,
       };
     })
     .filter(
@@ -272,7 +294,11 @@ function setLinkMode(enabled: boolean) {
 }
 
 function onCardClick(cardId: string) {
-  boardStore.selectCardForLink(cardId);
+  boardStore.selectTargetForLink(`card:${cardId}`);
+}
+
+function onPostItClick(noteId: string) {
+  boardStore.selectTargetForLink(`note:${noteId}`);
 }
 
 function onThreadColorInput(event: Event) {
@@ -663,7 +689,7 @@ onUnmounted(() => {
               Thread color
               <input :value="boardStore.linkColor" type="color" @input="onThreadColorInput" />
             </label>
-            <button v-if="!boardStore.linkMode" class="tool-btn" @click="setLinkMode(true)">Link Posts</button>
+            <button v-if="!boardStore.linkMode" class="tool-btn" @click="setLinkMode(true)">Link</button>
             <button v-else class="tool-btn" @click="setLinkMode(false)">Cancel Linking</button>
           </div>
 
@@ -698,7 +724,7 @@ onUnmounted(() => {
                 :key="card.id"
                 class="board-card"
                 :class="{
-                  selected: boardStore.selectedCardIds.includes(card.id),
+                  selected: boardStore.selectedLinkTargets.includes(`card:${card.id}`),
                   'media-card': Boolean(card.post.media?.length),
                 }"
                 :data-card-id="card.id"
@@ -761,8 +787,10 @@ onUnmounted(() => {
                 v-for="note in boardStore.postIts"
                 :key="note.id"
                 class="postit"
+                :class="{ selected: boardStore.selectedLinkTargets.includes(`note:${note.id}`) }"
                 :data-note-id="note.id"
                 :style="{ left: `${note.x}px`, top: `${note.y}px` }"
+                @click.stop="onPostItClick(note.id)"
               >
                 <div class="pin pin-postit" aria-hidden="true"></div>
                 <div class="postit-handle"></div>

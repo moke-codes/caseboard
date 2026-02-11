@@ -452,6 +452,11 @@ button:hover:not(:disabled) {
   z-index: 36;
 }
 
+.postit.selected::before {
+  outline: 3px dashed #67d2ff;
+  outline-offset: 2px;
+}
+
 .pin-postit {
   position: absolute;
   top: -10px;

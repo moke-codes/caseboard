@@ -24,7 +24,7 @@ export const useBoardStore = defineStore("board", () => {
 
   const linkMode = ref(false);
   const linkColor = ref("#cc1f36");
-  const selectedCardIds = ref<string[]>([]);
+  const selectedLinkTargets = ref<string[]>([]);
 
   const cardSeed = ref(1);
   const postItSeed = ref(1);
@@ -73,7 +73,7 @@ export const useBoardStore = defineStore("board", () => {
     cards.value = [];
     postIts.value = [];
     links.value = [];
-    selectedCardIds.value = [];
+    selectedLinkTargets.value = [];
     linkMode.value = false;
     cardSeed.value = 1;
     postItSeed.value = 1;
@@ -125,7 +125,7 @@ export const useBoardStore = defineStore("board", () => {
     cards.value = [];
     postIts.value = [];
     links.value = [];
-    selectedCardIds.value = [];
+    selectedLinkTargets.value = [];
     linkMode.value = false;
     cardSeed.value = 1;
     postItSeed.value = 1;
@@ -134,7 +134,7 @@ export const useBoardStore = defineStore("board", () => {
 
   function setLinkMode(enabled: boolean) {
     linkMode.value = enabled;
-    selectedCardIds.value = [];
+    selectedLinkTargets.value = [];
   }
 
   function setLinkColor(color: string) {
@@ -150,16 +150,16 @@ export const useBoardStore = defineStore("board", () => {
     });
   }
 
-  function selectCardForLink(cardId: string) {
+  function selectTargetForLink(targetId: string) {
     if (!linkMode.value) return;
-    if (selectedCardIds.value.includes(cardId)) return;
+    if (selectedLinkTargets.value.includes(targetId)) return;
 
-    selectedCardIds.value.push(cardId);
+    selectedLinkTargets.value.push(targetId);
 
-    if (selectedCardIds.value.length === 2) {
-      const [from, to] = selectedCardIds.value;
+    if (selectedLinkTargets.value.length === 2) {
+      const [from, to] = selectedLinkTargets.value;
       addLink(from, to, linkColor.value);
-      selectedCardIds.value = [];
+      selectedLinkTargets.value = [];
     }
   }
 
@@ -171,7 +171,7 @@ export const useBoardStore = defineStore("board", () => {
     links,
     linkMode,
     linkColor,
-    selectedCardIds,
+    selectedLinkTargets,
     addCard,
     moveCardByDelta,
     addPostIt,
@@ -181,7 +181,7 @@ export const useBoardStore = defineStore("board", () => {
     setLinkMode,
     setLinkColor,
     addLink,
-    selectCardForLink,
+    selectTargetForLink,
     hydrateForHandle,
     resetSessionState,
   };
