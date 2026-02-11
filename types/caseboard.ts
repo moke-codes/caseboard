@@ -20,6 +20,7 @@ export interface FeedPost {
   cid?: string;
   text: string;
   createdAt?: string;
+  replyCount?: number;
   authorDisplayName: string;
   authorHandle: string;
   authorAvatar?: string;

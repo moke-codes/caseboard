@@ -5,7 +5,7 @@ import type { FeedMediaItem, FeedOption, FeedPost, FeedSource } from "~/types/ca
 import { useBoardStore } from "~/stores/board";
 
 const boardStore = useBoardStore();
-const { session, isRestoringSession, initSession, login, logout: logoutBluesky, getActorFeeds, getFeedPage } =
+const { session, isRestoringSession, initSession, login, logout: logoutBluesky, getActorFeeds, getFeedPage, getPostReplies } =
   useBluesky();
 
 const identifier = ref("");
@@ -25,6 +25,7 @@ const feedHasMore = ref(true);
 const feedLoading = ref(false);
 const feedStatus = ref("Select a feed after login");
 const hydratedHandle = ref("");
+const replyViewStack = ref<{ parent: FeedPost; replies: FeedPost[] }[]>([]);
 
 const feedListRef = ref<HTMLElement | null>(null);
 const boardDropzoneRef = ref<HTMLElement | null>(null);
@@ -60,6 +61,16 @@ const boundVideoUrls = new WeakMap<HTMLVideoElement, string>();
 const accountLabel = computed(() => {
   if (!session.value) return "";
   return `${session.value.handle} connected`;
+});
+
+const inReplyView = computed(() => replyViewStack.value.length > 0);
+const activeReplyParent = computed(() => {
+  if (!replyViewStack.value.length) return null;
+  return replyViewStack.value[replyViewStack.value.length - 1].parent;
+});
+const visibleFeedItems = computed(() => {
+  if (!replyViewStack.value.length) return feedItems.value;
+  return replyViewStack.value[replyViewStack.value.length - 1].replies;
 });
 
 const renderedThreads = computed(() => {
@@ -171,6 +182,7 @@ function resetFeedState() {
   feedItems.value = [];
   feedCursor.value = null;
   feedHasMore.value = true;
+  replyViewStack.value = [];
 }
 
 async function loadMorePosts() {
@@ -203,6 +215,35 @@ async function loadMorePosts() {
 async function onFeedChange() {
   resetFeedState();
   await loadMorePosts();
+}
+
+async function openReplies(post: FeedPost) {
+  if (!post.uri || feedLoading.value) return;
+
+  feedLoading.value = true;
+  feedStatus.value = "Loading replies...";
+  try {
+    const replies = await getPostReplies(post.uri);
+    replyViewStack.value.push({ parent: post, replies });
+    feedStatus.value = replies.length ? "Replies loaded" : "No replies for this post.";
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not load replies.";
+    feedStatus.value = `Could not load replies: ${message}`;
+  } finally {
+    feedLoading.value = false;
+  }
+}
+
+function backReplyLevel() {
+  if (!replyViewStack.value.length) return;
+  replyViewStack.value.pop();
+  if (replyViewStack.value.length) {
+    feedStatus.value = "Replies loaded";
+  } else if (feedItems.value.length) {
+    feedStatus.value = feedHasMore.value ? "Scroll for more posts" : "End of feed";
+  } else {
+    feedStatus.value = "No posts available in this feed.";
+  }
 }
 
 async function bootstrapForSession() {
@@ -612,6 +653,7 @@ async function onLogout() {
   feedHasMore.value = true;
   feedLoading.value = false;
   feedStatus.value = "Select a feed after login";
+  replyViewStack.value = [];
 
   if (import.meta.client) {
     interactApi?.(".board-card").unset();
@@ -626,7 +668,7 @@ useInfiniteScroll(
   },
   {
     distance: 120,
-    canLoadMore: () => Boolean(session.value) && feedHasMore.value && !feedLoading.value,
+    canLoadMore: () => Boolean(session.value) && feedHasMore.value && !feedLoading.value && !inReplyView.value,
   },
 );
 
@@ -840,9 +882,16 @@ onUnmounted(() => {
             </select>
           </div>
 
+          <div v-if="inReplyView" class="reply-nav">
+            <button class="secondary" @click="backReplyLevel">&larr; Post</button>
+            <p class="muted">
+              Replies to {{ activeReplyParent?.authorDisplayName || "post" }}
+            </p>
+          </div>
+
           <div id="feed-list" ref="feedListRef">
             <article
-              v-for="post in feedItems"
+              v-for="post in visibleFeedItems"
               :key="post.uri || post.cid"
               class="feed-item"
               draggable="true"
@@ -890,7 +939,16 @@ onUnmounted(() => {
                   />
                 </template>
               </div>
-              <time class="date">{{ formatDate(post.createdAt) }}</time>
+              <div class="feed-item-meta">
+                <time class="date">{{ formatDate(post.createdAt) }}</time>
+                <button
+                  v-if="post.uri && (post.replyCount ?? 0) > 0"
+                  class="reply-link"
+                  @click.stop="openReplies(post)"
+                >
+                  View replies ({{ post.replyCount }})
+                </button>
+              </div>
             </article>
           </div>
 

@@ -22,6 +22,7 @@ interface RawFeedEntry {
       avatar?: string;
     };
     embed?: unknown;
+    replyCount?: number;
   };
 }
 
@@ -105,6 +106,54 @@ function extractMediaFromEmbed(embed: unknown): FeedMediaItem[] {
   }
 
   return [];
+}
+
+function normalizePostFromRecord(rawPost: Record<string, unknown>): FeedPost | null {
+  const record = asRecord(rawPost.record) ?? {};
+  const author = asRecord(rawPost.author) ?? {};
+
+  const uri = asString(rawPost.uri);
+  const cid = asString(rawPost.cid);
+  const text = asString(record.text) ?? "(No text content)";
+  const createdAt = asString(record.createdAt) ?? asString(rawPost.indexedAt);
+  const replyCount = typeof rawPost.replyCount === "number" ? rawPost.replyCount : undefined;
+
+  return {
+    uri,
+    cid,
+    text,
+    createdAt,
+    replyCount,
+    authorDisplayName: asString(author.displayName) ?? "Unknown",
+    authorHandle: asString(author.handle) ?? "unknown",
+    authorAvatar: asString(author.avatar),
+    media: extractMediaFromEmbed(rawPost.embed),
+  };
+}
+
+function getThreadNodePost(node: unknown): Record<string, unknown> | null {
+  const item = asRecord(node);
+  if (!item) return null;
+  if (item.post) return asRecord(item.post);
+  if (item.uri && item.author) return item;
+  return null;
+}
+
+function getThreadReplies(node: unknown): unknown[] {
+  const item = asRecord(node);
+  if (!item || !Array.isArray(item.replies)) return [];
+  return item.replies;
+}
+
+function findThreadNodeByUri(node: unknown, uri: string): unknown | null {
+  const post = getThreadNodePost(node);
+  if (post && asString(post.uri) === uri) return node;
+  const replies = getThreadReplies(node);
+  for (const reply of replies) {
+    const found = findThreadNodeByUri(reply, uri);
+    if (found) return found;
+  }
+  return null;
 }
 
 const ENCRYPTED_SESSION_KEY = "caseboard:auth:session";
@@ -247,19 +296,19 @@ function createAgent() {
 
 function normalizePost(entry: RawFeedEntry): FeedPost {
   const post = entry.post ?? {};
-  const record = post.record ?? {};
-  const author = post.author ?? {};
-
-  return {
-    uri: post.uri,
-    cid: post.cid,
-    text: record.text ?? "(No text content)",
-    createdAt: record.createdAt ?? post.indexedAt,
-    authorDisplayName: author.displayName ?? "Unknown",
-    authorHandle: author.handle ?? "unknown",
-    authorAvatar: author.avatar,
-    media: extractMediaFromEmbed(post.embed),
-  };
+  return (
+    normalizePostFromRecord(post as unknown as Record<string, unknown>) ?? {
+      uri: post.uri,
+      cid: post.cid,
+      text: "(No text content)",
+      createdAt: post.indexedAt,
+      authorDisplayName: "Unknown",
+      authorHandle: "unknown",
+      authorAvatar: undefined,
+      replyCount: typeof post.replyCount === "number" ? post.replyCount : undefined,
+      media: [],
+    }
+  );
 }
 
 export function useBluesky() {
@@ -424,6 +473,37 @@ export function useBluesky() {
     };
   }
 
+  async function getPostReplies(uri: string): Promise<FeedPost[]> {
+    if (!agent.value) {
+      throw new Error("Not authenticated");
+    }
+
+    const response = await agent.value.app.bsky.feed.getPostThread({
+      uri,
+      depth: 8,
+    });
+
+    const thread = response.data.thread;
+    const focusNode = findThreadNodeByUri(thread, uri) ?? thread;
+    const replies = getThreadReplies(focusNode);
+
+    const parsed: FeedPost[] = [];
+    const seen = new Set<string>();
+
+    for (const replyNode of replies) {
+      const post = getThreadNodePost(replyNode);
+      if (!post) continue;
+      const normalized = normalizePostFromRecord(post);
+      if (!normalized) continue;
+      const key = normalized.uri ?? normalized.cid ?? `${normalized.authorHandle}:${normalized.createdAt}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      parsed.push(normalized);
+    }
+
+    return parsed;
+  }
+
   return {
     session,
     isRestoringSession,
@@ -432,5 +512,6 @@ export function useBluesky() {
     logout,
     getActorFeeds,
     getFeedPage,
+    getPostReplies,
   };
 }

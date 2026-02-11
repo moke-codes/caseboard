@@ -243,6 +243,20 @@ button:hover:not(:disabled) {
   background: var(--panel-soft);
 }
 
+.reply-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  padding: 0.55rem 0.7rem;
+  border-bottom: 1px solid #393e48;
+  background: #21262d;
+}
+
+.reply-nav p {
+  margin: 0;
+}
+
 #feed-list {
   flex: 1;
   overflow: auto;
@@ -276,6 +290,30 @@ button:hover:not(:disabled) {
 .feed-item .date {
   color: #a0a8b4;
   font-size: 0.85rem;
+}
+
+.feed-item-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  margin-top: 0.2rem;
+}
+
+.reply-link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #78b6ff;
+  font-size: 0.82rem;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  border-radius: 0;
+}
+
+.reply-link:hover:not(:disabled) {
+  filter: none;
+  color: #a7d1ff;
 }
 
 .post-media-list {
