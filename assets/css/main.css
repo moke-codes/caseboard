@@ -665,6 +665,7 @@ button:hover:not(:disabled) {
   cursor: move;
   touch-action: none;
   z-index: 20 !important;
+  isolation: isolate;
 }
 
 .board-card.selected .polaroid {
@@ -838,6 +839,15 @@ button:hover:not(:disabled) {
   touch-action: none;
   padding-top: 0.45rem;
   isolation: isolate;
+  z-index: 400 !important;
+}
+
+/* Force consistent stacking in production even if inline styles get rewritten at runtime. */
+.board-stage > .board-card {
+  z-index: 20 !important;
+}
+
+.board-stage > .postit {
   z-index: 400 !important;
 }
 
