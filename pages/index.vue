@@ -1309,7 +1309,7 @@ onUnmounted(() => {
                   'link-source': quickLinkSource === `card:${card.id}`,
                 }"
                 :data-card-id="card.id"
-                :style="{ left: `${card.x}px`, top: `${card.y}px` }"
+                :style="{ left: `${card.x}px`, top: `${card.y}px`, zIndex: 20 }"
                 @click="onCardClick(card.id)"
                 @mouseenter="onBoardTargetHover(`card:${card.id}`)"
                 @mouseleave="onBoardTargetHover(null)"
@@ -1415,7 +1415,7 @@ onUnmounted(() => {
                   'link-source': quickLinkSource === `note:${note.id}`,
                 }"
                 :data-note-id="note.id"
-                :style="{ left: `${note.x}px`, top: `${note.y}px`, '--postit-color': note.color }"
+                :style="{ left: `${note.x}px`, top: `${note.y}px`, '--postit-color': note.color, zIndex: 40 }"
                 @click.stop="onPostItClick(note.id)"
                 @mouseenter="onBoardTargetHover(`note:${note.id}`)"
                 @mouseleave="onBoardTargetHover(null)"
