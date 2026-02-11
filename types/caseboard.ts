@@ -44,6 +44,7 @@ export interface PostIt {
   x: number;
   y: number;
   text: string;
+  color: string;
 }
 
 export interface ThreadLink {
@@ -60,6 +61,7 @@ export interface PersistedBoard {
   cardSeed: number;
   postItSeed: number;
   linkSeed: number;
+  postItColor?: string;
 }
 
 export interface SessionIdentity {

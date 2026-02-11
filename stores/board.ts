@@ -24,10 +24,96 @@ interface BoardHistorySnapshot {
   linkMode: boolean;
   selectedLinkTargets: string[];
   linkColor: string;
+  postItColor: string;
 }
 
 function cloneState<T>(state: T): T {
   return JSON.parse(JSON.stringify(state)) as T;
+}
+
+function hexToRgb(hex: string) {
+  const normalized = hex.replace("#", "").trim();
+  if (!/^[0-9a-f]{6}$/i.test(normalized)) return null;
+  const value = Number.parseInt(normalized, 16);
+  return {
+    r: (value >> 16) & 255,
+    g: (value >> 8) & 255,
+    b: value & 255,
+  };
+}
+
+function rgbToHex(r: number, g: number, b: number) {
+  const clamp = (value: number) => Math.max(0, Math.min(255, Math.round(value)));
+  const toHex = (value: number) => clamp(value).toString(16).padStart(2, "0");
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+function rgbToHsl(r: number, g: number, b: number) {
+  const rn = r / 255;
+  const gn = g / 255;
+  const bn = b / 255;
+  const max = Math.max(rn, gn, bn);
+  const min = Math.min(rn, gn, bn);
+  const delta = max - min;
+
+  let h = 0;
+  if (delta !== 0) {
+    if (max === rn) h = ((gn - bn) / delta) % 6;
+    else if (max === gn) h = (bn - rn) / delta + 2;
+    else h = (rn - gn) / delta + 4;
+    h = Math.round(h * 60);
+    if (h < 0) h += 360;
+  }
+
+  const l = (max + min) / 2;
+  const s = delta === 0 ? 0 : delta / (1 - Math.abs(2 * l - 1));
+  return { h, s, l };
+}
+
+function hslToRgb(h: number, s: number, l: number) {
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+
+  let r1 = 0;
+  let g1 = 0;
+  let b1 = 0;
+
+  if (h < 60) {
+    r1 = c;
+    g1 = x;
+  } else if (h < 120) {
+    r1 = x;
+    g1 = c;
+  } else if (h < 180) {
+    g1 = c;
+    b1 = x;
+  } else if (h < 240) {
+    g1 = x;
+    b1 = c;
+  } else if (h < 300) {
+    r1 = x;
+    b1 = c;
+  } else {
+    r1 = c;
+    b1 = x;
+  }
+
+  return {
+    r: (r1 + m) * 255,
+    g: (g1 + m) * 255,
+    b: (b1 + m) * 255,
+  };
+}
+
+function forceLightTone(hex: string) {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return "#f9e87f";
+  const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
+  const adjustedLightness = Math.max(hsl.l, 0.72);
+  const adjustedSaturation = Math.max(Math.min(hsl.s, 0.95), 0.28);
+  const adjusted = hslToRgb(hsl.h, adjustedSaturation, adjustedLightness);
+  return rgbToHex(adjusted.r, adjusted.g, adjusted.b);
 }
 
 export const useBoardStore = defineStore("board", () => {
@@ -40,6 +126,7 @@ export const useBoardStore = defineStore("board", () => {
 
   const linkMode = ref(false);
   const linkColor = ref("#cc1f36");
+  const postItColor = ref("#f9e87f");
   const selectedLinkTargets = ref<string[]>([]);
 
   const cardSeed = ref(1);
@@ -68,6 +155,7 @@ export const useBoardStore = defineStore("board", () => {
       linkMode: linkMode.value,
       selectedLinkTargets: [...selectedLinkTargets.value],
       linkColor: linkColor.value,
+      postItColor: postItColor.value,
     };
   }
 
@@ -102,6 +190,7 @@ export const useBoardStore = defineStore("board", () => {
     linkMode.value = snapshot.linkMode;
     selectedLinkTargets.value = [...snapshot.selectedLinkTargets];
     linkColor.value = snapshot.linkColor;
+    postItColor.value = snapshot.postItColor;
     isApplyingHistory.value = false;
   }
 
@@ -171,6 +260,7 @@ export const useBoardStore = defineStore("board", () => {
         cardSeed: cardSeed.value,
         postItSeed: postItSeed.value,
         linkSeed: linkSeed.value,
+        postItColor: postItColor.value,
       },
     };
   }
@@ -189,6 +279,7 @@ export const useBoardStore = defineStore("board", () => {
       linkSeed.value = fresh.linkSeed;
       linkMode.value = false;
       selectedLinkTargets.value = [];
+      postItColor.value = "#f9e87f";
       resetHistoryState();
       return;
     }
@@ -201,6 +292,11 @@ export const useBoardStore = defineStore("board", () => {
     linkSeed.value = saved.linkSeed ?? 1;
     linkMode.value = false;
     selectedLinkTargets.value = [];
+    postItColor.value = forceLightTone(saved.postItColor ?? "#f9e87f");
+    postIts.value = postIts.value.map((note) => ({
+      ...note,
+      color: forceLightTone(note.color ?? saved.postItColor ?? "#f9e87f"),
+    }));
     resetHistoryState();
   }
 
@@ -212,6 +308,7 @@ export const useBoardStore = defineStore("board", () => {
       cardSeed: cardSeed.value,
       postItSeed: postItSeed.value,
       linkSeed: linkSeed.value,
+      postItColor: postItColor.value,
     };
   }
 
@@ -225,6 +322,11 @@ export const useBoardStore = defineStore("board", () => {
     linkSeed.value = board.linkSeed ?? 1;
     linkMode.value = false;
     selectedLinkTargets.value = [];
+    postItColor.value = forceLightTone(board.postItColor ?? "#f9e87f");
+    postIts.value = postIts.value.map((note) => ({
+      ...note,
+      color: forceLightTone(note.color ?? board.postItColor ?? "#f9e87f"),
+    }));
     resetHistoryState();
   }
 
@@ -235,6 +337,7 @@ export const useBoardStore = defineStore("board", () => {
     links.value = [];
     selectedLinkTargets.value = [];
     linkMode.value = false;
+    postItColor.value = "#f9e87f";
     cardSeed.value = 1;
     postItSeed.value = 1;
     linkSeed.value = 1;
@@ -280,6 +383,7 @@ export const useBoardStore = defineStore("board", () => {
       x: 30 + offset * 14,
       y: 26 + offset * 12,
       text: "",
+      color: postItColor.value,
     });
     markChanged();
   }
@@ -331,6 +435,10 @@ export const useBoardStore = defineStore("board", () => {
     linkColor.value = color;
   }
 
+  function setPostItColor(color: string) {
+    postItColor.value = forceLightTone(color);
+  }
+
   function addLink(from: string, to: string, color = linkColor.value) {
     recordBeforeMutation();
     links.value.push({
@@ -364,6 +472,7 @@ export const useBoardStore = defineStore("board", () => {
     changeVersion,
     linkMode,
     linkColor,
+    postItColor,
     selectedLinkTargets,
     addCard,
     moveCardByDelta,
@@ -381,6 +490,7 @@ export const useBoardStore = defineStore("board", () => {
     redo,
     setLinkMode,
     setLinkColor,
+    setPostItColor,
     addLink,
     selectTargetForLink,
     hydrateForHandle,

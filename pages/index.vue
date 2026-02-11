@@ -655,6 +655,12 @@ function onThreadColorInput(event: Event) {
   boardStore.setLinkColor(target.value);
 }
 
+function onPostItColorInput(event: Event) {
+  if (!canEditBoard.value) return;
+  const target = event.target as HTMLInputElement;
+  boardStore.setPostItColor(target.value);
+}
+
 function onUndo() {
   boardStore.undo();
 }
@@ -925,7 +931,7 @@ function initInteract() {
 
   interactApi(".postit").draggable({
     inertia: true,
-    allowFrom: ".postit-handle",
+    ignoreFrom: ".postit-editor, .postit-actions a, .postit-actions .action-link",
     listeners: {
       start() {
         boardStore.beginHistoryBatch();
@@ -1131,7 +1137,15 @@ onUnmounted(() => {
         <section id="board-panel">
           <div class="board-toolbar">
             <div class="toolbar-group">
-              <button class="tool-btn" :disabled="!canEditBoard" @click="addPostIt">Add Post-it</button>
+              <button class="tool-btn" :disabled="!canEditBoard" @click="addPostIt">Post-it</button>
+              <label class="thread-color-control postit-color-control" aria-label="Post-it color">
+                <input
+                  :value="boardStore.postItColor"
+                  :disabled="!canEditBoard"
+                  type="color"
+                  @input="onPostItColorInput"
+                />
+              </label>
               <button class="tool-btn" :disabled="!canEditBoard || !boardStore.canUndo" @click="onUndo">Undo</button>
               <button class="tool-btn" :disabled="!canEditBoard || !boardStore.canRedo" @click="onRedo">Redo</button>
               <button class="tool-btn tool-btn-danger" :disabled="!canEditBoard" @click="openClearBoardModal">
@@ -1282,7 +1296,7 @@ onUnmounted(() => {
                 class="postit"
                 :class="{ selected: boardStore.selectedLinkTargets.includes(`note:${note.id}`) }"
                 :data-note-id="note.id"
-                :style="{ left: `${note.x}px`, top: `${note.y}px` }"
+                :style="{ left: `${note.x}px`, top: `${note.y}px`, '--postit-color': note.color }"
                 @click.stop="onPostItClick(note.id)"
               >
                 <div class="pin pin-postit" aria-hidden="true"></div>

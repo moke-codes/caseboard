@@ -257,6 +257,11 @@ button:hover:not(:disabled) {
   border-radius: 50%;
 }
 
+.postit-color-control {
+  border-color: #7f6a3c;
+  background: linear-gradient(180deg, #564624, #43361c);
+}
+
 #board-dropzone {
   position: relative;
   flex: 1;
@@ -772,8 +777,10 @@ button:hover:not(:disabled) {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(130deg, #fef5ac, #ffe96a);
-  border: 1px solid #e0cb58;
+  background:
+    linear-gradient(130deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0)),
+    var(--postit-color, #f9e87f);
+  border: 1px solid rgba(95, 74, 28, 0.42);
   box-shadow: 0 7px 15px rgba(0, 0, 0, 0.3);
   z-index: 36;
 }
