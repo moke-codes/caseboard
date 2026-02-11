@@ -135,7 +135,8 @@ function formatDate(value?: string) {
 
 function postUriToWebUrl(post: FeedPost) {
   if (!post.uri || !post.authorHandle) return null;
-  const match = post.uri.match(/^at:\/\/[^/]+\/app\.bsky\.feed\.post\/([^/?#]+)$/);
+  const normalizedUri = post.uri.split("#")[0];
+  const match = normalizedUri.match(/^at:\/\/[^/]+\/app\.bsky\.feed\.post\/([^/?#]+)$/);
   if (!match) return null;
   return `https://bsky.app/profile/${post.authorHandle}/post/${match[1]}`;
 }
