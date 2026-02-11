@@ -44,6 +44,7 @@ const shareError = ref("");
 const shareLinkView = ref("");
 const shareLinkEdit = ref("");
 const shareLoading = ref(false);
+const expandedImage = ref<{ url: string; alt: string } | null>(null);
 const sharedRole = ref<"view" | "edit" | null>(null);
 const sharedContext = ref<{ id: string; token: string } | null>(null);
 const sharedRevision = ref(0);
@@ -648,6 +649,18 @@ function onDeletePostIt(noteId: string) {
   boardStore.deletePostIt(noteId);
 }
 
+function openImagePreview(media: FeedMediaItem) {
+  if (media.type !== "image") return;
+  expandedImage.value = {
+    url: media.url,
+    alt: media.alt || "Expanded media",
+  };
+}
+
+function closeImagePreview() {
+  expandedImage.value = null;
+}
+
 function isVideoLikeMedia(media: FeedMediaItem) {
   return media.type === "video" || media.type === "gif";
 }
@@ -1163,13 +1176,18 @@ onUnmounted(() => {
                           playsinline
                           preload="metadata"
                         ></video>
-                        <img
-                          v-else
-                          class="post-media"
-                          :src="mediaItem.url"
-                          :alt="mediaItem.alt || 'Post media'"
-                          loading="lazy"
-                        />
+                        <div v-else-if="mediaItem.type === 'image'" class="media-image-wrap">
+                          <img class="post-media" :src="mediaItem.url" :alt="mediaItem.alt || 'Post media'" loading="lazy" />
+                          <button
+                            class="media-expand-btn"
+                            type="button"
+                            aria-label="Expand image"
+                            @click.stop.prevent="openImagePreview(mediaItem)"
+                          >
+                            <span class="magnifier-icon" aria-hidden="true"></span>
+                          </button>
+                        </div>
+                        <img v-else class="post-media" :src="mediaItem.url" :alt="mediaItem.alt || 'Post media'" loading="lazy" />
                       </template>
                     </div>
                     <p class="media-caption" v-html="linkifyPostText(card.post.text)"></p>
@@ -1308,13 +1326,18 @@ onUnmounted(() => {
                       playsinline
                       preload="metadata"
                     ></video>
-                    <img
-                      v-else
-                      class="post-media"
-                      :src="mediaItem.url"
-                      :alt="mediaItem.alt || 'Post media'"
-                      loading="lazy"
-                    />
+                    <div v-else-if="mediaItem.type === 'image'" class="media-image-wrap">
+                      <img class="post-media" :src="mediaItem.url" :alt="mediaItem.alt || 'Post media'" loading="lazy" />
+                      <button
+                        class="media-expand-btn"
+                        type="button"
+                        aria-label="Expand image"
+                        @click.stop.prevent="openImagePreview(mediaItem)"
+                      >
+                        <span class="magnifier-icon" aria-hidden="true"></span>
+                      </button>
+                    </div>
+                    <img v-else class="post-media" :src="mediaItem.url" :alt="mediaItem.alt || 'Post media'" loading="lazy" />
                   </template>
                 </div>
                 <div class="feed-item-meta">
@@ -1389,13 +1412,18 @@ onUnmounted(() => {
                       playsinline
                       preload="metadata"
                     ></video>
-                    <img
-                      v-else
-                      class="post-media"
-                      :src="mediaItem.url"
-                      :alt="mediaItem.alt || 'Post media'"
-                      loading="lazy"
-                    />
+                    <div v-else-if="mediaItem.type === 'image'" class="media-image-wrap">
+                      <img class="post-media" :src="mediaItem.url" :alt="mediaItem.alt || 'Post media'" loading="lazy" />
+                      <button
+                        class="media-expand-btn"
+                        type="button"
+                        aria-label="Expand image"
+                        @click.stop.prevent="openImagePreview(mediaItem)"
+                      >
+                        <span class="magnifier-icon" aria-hidden="true"></span>
+                      </button>
+                    </div>
+                    <img v-else class="post-media" :src="mediaItem.url" :alt="mediaItem.alt || 'Post media'" loading="lazy" />
                   </template>
                 </div>
                 <div class="feed-item-meta">
@@ -1471,6 +1499,21 @@ onUnmounted(() => {
           </label>
           <button class="secondary" @click="copyShareLink(shareLinkEdit)">Copy Editor</button>
         </div>
+      </div>
+    </div>
+
+    <div
+      v-if="expandedImage"
+      id="media-preview-modal"
+      class="modal media-preview-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Expanded image preview"
+      @click.self="closeImagePreview"
+    >
+      <div class="modal-content media-preview-content">
+        <button class="secondary media-preview-close" type="button" @click="closeImagePreview">Close</button>
+        <img :src="expandedImage.url" :alt="expandedImage.alt" />
       </div>
     </div>
   </main>

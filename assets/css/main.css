@@ -509,6 +509,76 @@ button:hover:not(:disabled) {
   background: #0a0b0e;
 }
 
+.media-image-wrap {
+  position: relative;
+}
+
+.media-image-wrap .post-media {
+  display: block;
+}
+
+.media-expand-btn {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: rgba(244, 250, 255, 0.68);
+  font-size: 1rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.9));
+  opacity: 0;
+  transform: translateY(3px);
+  transition: opacity 140ms ease, transform 140ms ease, background 140ms ease;
+  pointer-events: none;
+}
+
+.magnifier-icon {
+  position: relative;
+  width: 1.35rem;
+  height: 1.35rem;
+  display: block;
+}
+
+.magnifier-icon::before {
+  content: "";
+  position: absolute;
+  left: 0.08rem;
+  top: 0.06rem;
+  width: 0.8rem;
+  height: 0.8rem;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+}
+
+.magnifier-icon::after {
+  content: "";
+  position: absolute;
+  right: 0.02rem;
+  bottom: 0.08rem;
+  width: 0.58rem;
+  height: 0.13rem;
+  border-radius: 999px;
+  background: currentColor;
+  transform: rotate(45deg);
+  transform-origin: center;
+}
+
+.media-image-wrap:hover .media-expand-btn,
+.media-image-wrap:focus-within .media-expand-btn {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.media-expand-btn:hover:not(:disabled) {
+  color: rgba(244, 250, 255, 0.9);
+}
+
 .media-card .polaroid {
   padding: 0.55rem 0.55rem 1rem;
 }
@@ -824,6 +894,34 @@ button:hover:not(:disabled) {
 
 .share-links input {
   font-size: 0.8rem;
+}
+
+.media-preview-modal {
+  background: rgba(9, 12, 18, 0.9);
+}
+
+.media-preview-content {
+  width: min(980px, 94vw);
+  max-height: 92vh;
+  background: #12161d;
+  border: 1px solid #2f3947;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.media-preview-close {
+  justify-self: end;
+  border-radius: 8px;
+  padding: 0.4rem 0.7rem;
+}
+
+.media-preview-content img {
+  width: 100%;
+  max-height: calc(92vh - 3.8rem);
+  object-fit: contain;
+  border-radius: 7px;
+  border: 1px solid #2d3340;
+  background: #070a10;
 }
 
 @media (max-width: 920px) {
